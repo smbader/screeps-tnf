@@ -87,7 +87,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
         var controller = mycreep.room.controller;
         mycreep.moveTo(controller);
         mycreep.upgradeController(controller);
-
+        }
     }
 
   }
