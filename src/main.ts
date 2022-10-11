@@ -49,7 +49,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
     let room = Game.rooms[roomid];
 
     // What kind of room are we looking at?
-    if (room.controller?.owner?.username == "ricane") {
+    if (room.controller?.owner?.username == "Vardendruid") {
 
       console.log(`We found a room that we own: ` + roomid);
       // We're looking at a room we own!  We should try to be productive.
@@ -62,12 +62,31 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
         // Attempt to spawn a screep!
         let spawn = spawns[0];
-        spawn.spawnCreep([WORK, CARRY, MOVE], 'Worker1');
+        spawn.spawnCreep([WORK, MOVE, CARRY, MOVE], 'Worker1');
 
       } else {
         // It wasn't greater than 0... meaning we have no spawns.
         // This room can't create creeps.
       }
+
+        // get a reference to our creep
+
+        var mycreep = Game.creeps["Worker1"];
+        mycreep.say("I live!");
+
+        // if creep has no energy, go to the energy source and harvest some
+
+        if(mycreep.store[RESOURCE_ENERGY] == 0) {
+            var source = Game.getObjectById("f0a3a596141a8d65db841570");
+            mycreep.moveTo(source);
+            mycreep.harvest(source);
+
+        } else {
+
+        // if our screep does have energy, bring it to the controller and upgrade it
+        var controller = mycreep.room.controller;
+        mycreep.moveTo(controller);
+        mycreep.upgradeController(controller);
 
     }
 
