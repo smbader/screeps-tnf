@@ -83,10 +83,10 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
         } else {
 
-        // if our screep does have energy, bring it to the controller and upgrade it
-        var controller = mycreep.room.controller;
-        mycreep.moveTo(controller);
-        mycreep.upgradeController(controller);
+            // if our screep does have energy, bring it to the controller and upgrade it
+            var controller = mycreep.room.controller;
+            mycreep.moveTo(controller);
+            mycreep.upgradeController(controller);
         }
     }
 
