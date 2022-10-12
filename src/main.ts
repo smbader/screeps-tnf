@@ -49,7 +49,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
     let room = Game.rooms[roomid];
 
     // What kind of room are we looking at?
-    if (room.controller?.owner?.username == "ricane") {
+    if (room.controller?.owner?.username == "Vardendruid") {
 
       console.log(`We found a room that we own: ` + roomid);
       // We're looking at a room we own!  We should try to be productive.
@@ -62,13 +62,50 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
         // Attempt to spawn a screep!
         let spawn = spawns[0];
-        spawn.spawnCreep([WORK, CARRY, MOVE], 'Worker1');
+        spawn.spawnCreep([WORK, MOVE, CARRY, MOVE], 'Worker1');
 
       } else {
         // It wasn't greater than 0... meaning we have no spawns.
         // This room can't create creeps.
       }
 
+      // get a reference to our creep
+      var mycreep = Game.creeps["Worker1"];
+
+      // What if my creep doesn't exist?
+      if (!mycreep) {
+        // LAME.
+        return;
+      }
+      mycreep.say("I live!");
+
+      // Find all the sources in the room.
+      // Typically two, sometimes 1, center rooms have 4, and non-player rooms have none.
+      let sources = room.find(FIND_SOURCES);
+
+      // Let's make sure there is atleast 1
+      if (sources.length > 0) {
+
+        // We can farm! We'll choose the first one.
+        let source = mycreep.pos.findClosestByRange(FIND_SOURCES);
+
+        // if creep has energy less than or equal to 48, go to the energy source and harvest some
+        if(mycreep.store[RESOURCE_ENERGY] <= 48) {
+
+          mycreep.moveTo(source);
+          mycreep.harvest(source);
+
+        } else {
+
+          // if our screep does have energy, bring it to the controller and upgrade it
+          mycreep.moveTo(room.controller);
+          mycreep.upgradeController(room.controller);
+        }
+
+      } else {
+        // No sources, the screep should just sit and weep.
+        mycreep.say("I'm so lonely.");
+      }
     }
 
   }
