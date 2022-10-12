@@ -87,10 +87,10 @@ export const loop = ErrorMapper.wrapLoop(() => {
       if (sources.length > 0) {
 
         // We can farm! We'll choose the first one.
-        let source = sources[0];
+        let source = mycreep.pos.findClosestByRange(FIND_SOURCES);
 
-        // if creep has no energy, go to the energy source and harvest some
-        if(mycreep.store[RESOURCE_ENERGY] == 0) {
+        // if creep has energy less than or equal to 48, go to the energy source and harvest some
+        if(mycreep.store[RESOURCE_ENERGY] <= 48) {
 
           mycreep.moveTo(source);
           mycreep.harvest(source);
