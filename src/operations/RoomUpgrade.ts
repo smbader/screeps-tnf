@@ -1,6 +1,8 @@
 import { Operation } from "../classes/operation";
 import { Operator } from "../classes/operator";
 import { RoomUpgrader } from "../operator/RoomUpgrader";
+import { Harvester } from "../operator/Harvester";
+import { MapHelper } from "../utils/MapHelper";
 
 export class RoomUpgrade extends Operation {
 
@@ -49,23 +51,39 @@ export class RoomUpgrade extends Operation {
             if (sources.length == 0) {
                 continue;
             } else {
+                this.levelOne(room, sources);
+
                 let idx_source = 0;
                 for (let source of sources) {
-                    // Nothing yet.
-                    // Find available parking spaces.
+                    let name = 'Harvester_' + room.name + '_' + idx_source;
+                    let operator = new Harvester(name, room, source.id);
 
-                    // For now we will request one operator per source.
-                    // We need a unique name
-                    let name = 'Upgrader_' + room.name + '_' + idx_source;
-                    let operator = new RoomUpgrader(name, room, source.id, '');
-
-                    console.log(`    Requesting room upgrader: ` +  name);
+                    console.log(`    Requesting Source Harvester: ` +  name);
                     this.operationOperators.push(operator);
-
                     idx_source += 1;
                 }
-            }
 
+            }
+        }
+    }
+
+    private levelOne(room:Room, sources:Source[]) {
+        let idx_source = 0;
+        for (let source of sources) {
+            // Nothing yet.
+            // Find available parking spaces.
+            let parkingSpots = MapHelper.getOpenSpacesInRange(source, 1);
+
+            for (let i = 0; i <= parkingSpots.length; i++) {
+                // We need a unique name
+                let name = 'Upgrader_' + room.name + '_' + idx_source;
+                let operator = new RoomUpgrader(name, room, source.id, '');
+
+                console.log(`    Requesting room upgrader: ` +  name);
+                this.operationOperators.push(operator);
+
+                idx_source += 1;
+            }
         }
     }
 
@@ -86,8 +104,21 @@ export class RoomUpgrade extends Operation {
                 } else {
                     for(let spawn of spawns) {
                         if (!spawn.spawning) {
-                            console.log(`    Spawning: ` +  operationOperator.name);
-                            spawn.spawnCreep([WORK, MOVE, CARRY, MOVE], operationOperator.name);
+                            console.log(JSON.stringify(operationOperator.constructor.name));
+                            if (operationOperator instanceof Harvester) {
+                                console.log(`    Spawning: ` +  operationOperator.name);
+                                spawn.spawnCreep([MOVE, WORK, WORK, WORK], operationOperator.name);
+                            } else {
+                                if (spawn.room.controller?.level == 1) {
+                                    // Only spawn upgraders if level 1
+                                    console.log(`    Spawning: ` +  operationOperator.name);
+                                    spawn.spawnCreep([WORK, MOVE, CARRY, MOVE], operationOperator.name);
+                                } else {
+                                    console.log(`    Spawning: ` +  operationOperator.name);
+                                    spawn.spawnCreep([CARRY, MOVE, CARRY, MOVE], operationOperator.name);
+                                }
+                            }
+
                         }
                     }
                 }

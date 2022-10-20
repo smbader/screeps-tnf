@@ -30,6 +30,9 @@ export class RoomUpgrader extends Operator {
 
     actions() {
 
+        // Creep may not exist yet.
+        if (!this.creep) { return; }
+
         // While you're harvesting continue until you're full.
         if (this.creep.memory.working == true) {
 
@@ -39,7 +42,7 @@ export class RoomUpgrader extends Operator {
 
             console.log(`    ` + this.name + `: Harvesting`);
             if (this.creep.store[RESOURCE_ENERGY] == this.creep.store.getCapacity()) {
-                this.creep.memory.working = false
+                this.creep.memory.working = false;
             }
 
         } else {
@@ -54,6 +57,7 @@ export class RoomUpgrader extends Operator {
             if (this.creep.store[RESOURCE_ENERGY] == 0) {
                 this.creep.memory.working = true;
             }
+
         }
 
 

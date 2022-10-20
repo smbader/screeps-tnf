@@ -1,5 +1,7 @@
 import { Operation } from "../classes/operation";
-import { RoomUpgrade } from "operations/RoomUpgrade"
+import { RoomUpgrade } from "operations/RoomUpgrade";
+import { EnergyManagement } from "operations/EnergyManagement";
+import { ConstructionCompany } from "operations/ConstructionCompany";
 
 type Type_Operation_Classes = {
     [key: string]: any,
@@ -7,6 +9,8 @@ type Type_Operation_Classes = {
 
 const OPERATION_CLASSES: Type_Operation_Classes = {
     roomupgrade: RoomUpgrade,
+    constructioncompany: ConstructionCompany,
+    energymanagement: EnergyManagement,
 };
 
 export var OperationHelper = {
