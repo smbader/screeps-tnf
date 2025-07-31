@@ -3,7 +3,7 @@ import { Operator } from "../classes/operator";
 
 interface ClaimerMemory extends CreepMemory {
     targetRoom: string;
-    waypoint: number | null;
+    waypoint: number | undefined;
 }
 
 export class ClaimerCreep extends Creep {

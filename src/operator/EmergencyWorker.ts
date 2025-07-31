@@ -165,17 +165,16 @@ export class EmergencyWorker extends Operator {
 
                 }
 
-                //if (targets.length > 0) {
-                //    this.creep.memory.target = targets[0].id;
-               //     this.creep.memory.action = 'transfer';
-                //} else if (empty) {
-                //    this.creep.memory.target = empty.id;
-                //    this.creep.memory.action = 'transfer';
-                //} else if (spawnConstruction) {
-               //     this.creep.memory.target = spawnConstruction.id;
-                //    this.creep.memory.action = 'build';
-               // } else
-                if (this.targetroom.controller) {
+                if (targets.length > 0) {
+                    this.creep.memory.target = targets[0].id;
+                    this.creep.memory.action = 'transfer';
+                } else if (empty) {
+                    this.creep.memory.target = empty.id;
+                    this.creep.memory.action = 'transfer';
+                } else if (spawnConstruction) {
+                    this.creep.memory.target = spawnConstruction.id;
+                    this.creep.memory.action = 'build';
+                } else if (this.targetroom.controller) {
                     this.creep.memory.target = this.targetroom.controller.id;
                     this.creep.memory.action = 'upgrade';
                 }

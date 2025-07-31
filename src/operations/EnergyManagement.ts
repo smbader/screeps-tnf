@@ -104,9 +104,13 @@ export class EnergyManagement extends Operation {
                         for (let i = 0; i < room.memory.config.energysources[idx].haulers;  i++) {
                             let haulerName = 'Hauler_' + room.name + '_' + i + '_' + idx;
 
-                            operator = new Hauler(haulerName, room, room.memory.config.energysources[idx].id);
+                            operator = new Hauler(haulerName, room, room.memory.config.energysources[idx].id, false);
                             this.operationOperators.push(operator);
                         }
+
+                        let haulerName = 'Hauler_' + room.name + '_storage';
+                        operator = new Hauler(haulerName, room, room.memory.config.energysources[idx].id, true);
+                        this.operationOperators.push(operator);
                     }
                 }
 
@@ -365,8 +369,8 @@ export class EnergyManagement extends Operation {
             let cpuStart = Game.cpu.getUsed();
             operationOperator.actions();
             let cpuUsed = Game.cpu.getUsed() - cpuStart;
-            if (cpuUsed > 0.50) {
-                //console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
+            if (cpuUsed > 0.20) {
+                console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
             }
         }
     }

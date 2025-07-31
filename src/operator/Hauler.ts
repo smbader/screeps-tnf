@@ -2,6 +2,8 @@ import {filter} from "lodash";
 import {Operator} from "../classes/operator";
 
 import {MapHelper} from "../utils/MapHelper";
+type GSResourceTypes = "energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence";
+
 
 interface HaulerMemory extends CreepMemory {
     targetResources: Id<Resource> | null;
@@ -26,8 +28,9 @@ export class Hauler extends Operator {
     };
 
     creep: HaulerCreep | null;
+    isStorage: Boolean;
 
-    constructor(name: string, room: Room, sourceid: string) {
+    constructor(name: string, room: Room, sourceid: string, isStorage: boolean) {
         super(name, room);
 
         this.memory = {};
@@ -41,6 +44,7 @@ export class Hauler extends Operator {
             this.creep = null;
         }
         this.room = room;
+        this.isStorage = isStorage;
     }
 
     actions() {
@@ -52,7 +56,7 @@ export class Hauler extends Operator {
         if (this.creep.store.getUsedCapacity() == this.creep.store.getCapacity()) {
             this.creep.memory.working = false;
         }
-        if (this.creep.store[RESOURCE_ENERGY] == 0 && this.creep.memory.working == false) {
+        if (this.creep.store.getUsedCapacity() == 0 && this.creep.memory.working == false) {
             this.creep.memory.working = true;
             this.creep.memory.targetResources = null;
             this.creep.memory.targetContainer = null;
@@ -93,6 +97,77 @@ export class Hauler extends Operator {
                 } else {
                     this.creep.memory.targetResources = null;
                 }
+            }
+
+            if (this.isStorage) {
+
+                const targets = this.creep.room.find(FIND_DROPPED_RESOURCES);
+                if (targets.length > 0) {
+                    let target = targets[0];
+
+                    for (const t in targets) {
+                        const ttarget = targets[t];
+                        if (ttarget.resourceType == RESOURCE_ENERGY) {
+                            if (!target) {
+                                target = ttarget;
+                                continue;
+                            }
+                        }
+                        if (ttarget.amount > target.amount) {
+                            target = ttarget;
+                        }
+                    }
+
+                    this.creep.memory.targetResources = target.id;
+                    const result = this.creep.pickup(target);
+                    this.creep.say('🏗️');
+                    if (result == ERR_NOT_IN_RANGE) {
+                        this.creep.travelTo(target.pos);
+                        this.creep.say('🚚');
+                    }
+                    return;
+                }
+
+
+                let containers = this.creep.room.find<StructureContainer>(FIND_STRUCTURES, {
+                    filter: (s) => s.structureType == STRUCTURE_CONTAINER
+                });
+
+                let targetContainer = null;
+                let maxEnergy = 0;
+
+                for (let container of containers) {
+                    if (container.store.getUsedCapacity(RESOURCE_ENERGY) > maxEnergy) {
+                        maxEnergy = container.store[RESOURCE_ENERGY];
+                        targetContainer = container;
+                    }
+                }
+
+                if (targetContainer && maxEnergy > 0) {
+                    this.creep.memory.targetContainer = targetContainer.id;
+                    const result = this.creep.withdraw(targetContainer, RESOURCE_ENERGY);
+                    if (result == ERR_NOT_IN_RANGE) {
+                        this.creep.travelTo(targetContainer.pos);
+                        this.creep.say('🚚');
+                        return;
+                    } else if (result == OK) {
+                        this.creep.say('🏗️');
+                        return;
+                    }
+                    return;
+                }
+
+                // move away from spawn.
+                let target = this.creep.pos.findClosestByPath<StructureSpawn>(FIND_STRUCTURES, {
+                    filter: (structure) => {
+                        return (structure.structureType == STRUCTURE_SPAWN);
+                    }
+                });
+                if (target && this.creep.pos.getRangeTo(target) < 2) {
+                    this.creep.travelTo(RoomPosition(25,25, this.creep.room.name));
+                }
+
+                return;
             }
 
             let target = this.creep.pos.findClosestByRange<StructureContainer>(FIND_STRUCTURES, {
@@ -168,12 +243,23 @@ export class Hauler extends Operator {
             })[0];
 
             // If remote hauler, go to storage
-            if (this.creep.name.startsWith('RemoteHauler') && storage) {
+            if ((this.creep.name.startsWith('RemoteHauler') && storage) || this.isStorage) {
                 this.creep.say(this.creep.name);
                 if (this.creep.transfer(storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
                     this.creep.travelTo(storage.pos);
                     this.creep.say('175');
                     return;
+                }
+            }
+
+            if (this.creep.store.getUsedCapacity(RESOURCE_ENERGY) != this.creep.store.getUsedCapacity()) {
+                for(const resourceType in this.creep.store) {
+
+                    if (this.creep.transfer(storage, <GSResourceTypes>resourceType) == ERR_NOT_IN_RANGE) {
+                        this.creep.travelTo(storage.pos);
+                        this.creep.say('175');
+                        return;
+                    }
                 }
             }
 

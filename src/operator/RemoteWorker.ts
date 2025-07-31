@@ -9,7 +9,7 @@ interface RemoteWorkerMemory extends CreepMemory {
     targetContainer: Id<StructureContainer> | null;
     target?: Id<any> | null;
     action?: string;
-    waypoint: number | null;
+    waypoint: number | undefined;
     targetRoom: string;
 };
 
@@ -68,12 +68,6 @@ this.creep.say(' '+ sid);
             return;
         }
 
-        if (this.shouldFlee(this.creep)) {
-            this.flee(this.creep);
-            this.creep.say('🚨 Flee!');
-            return; // Skip other logic if fleeing
-        }
-
         // First objective is to complete waypoints
         if (this.creep.memory.waypoint == undefined || this.creep.memory.waypoint == null)  {
             this.creep.memory.waypoint = 0;
@@ -100,11 +94,17 @@ this.creep.say(' '+ sid);
         }
 
         if (this.creep.memory.targetRoom !== this.creep.room.name) {
-            let roomPos = new RoomPosition(25, 25, this.creep.memory.targetRoom)
+            let roomPos = new RoomPosition(6, 48, this.creep.memory.targetRoom)
             this.creep.travelTo(roomPos);
             return;
         }
 
+
+        if (this.shouldFlee(this.creep)) {
+            this.flee(this.creep);
+            this.creep.say('🚨 Flee!');
+            return; // Skip other logic if fleeing
+        }
 
         // WAYPOINT MOVEMENT IS COMPLETE
 
@@ -270,7 +270,7 @@ this.creep.say(' '+ sid);
 
         // Find nearby enemies within a dangerous range (e.g., 4 tiles)
         const threateningEnemies = hostiles.filter(enemy =>
-            creep.pos.getRangeTo(enemy) <= 4
+            creep.pos.getRangeTo(enemy) <= 9
         );
 
         // Return true if there's at least one enemy close enough
@@ -285,7 +285,7 @@ this.creep.say(' '+ sid);
             creep.pos,
             hostiles.map(enemy => ({
                 pos: enemy.pos,
-                range: 3  // try to keep at least 3 tiles distance
+                range: 10  // try to keep at least 3 tiles distance
             })),
             {
                 flee: true,

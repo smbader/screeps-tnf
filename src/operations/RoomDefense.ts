@@ -15,89 +15,133 @@ export class RoomDefense extends Operation {
   }
 
   public init() {
-    for (const roomid in Game.rooms) {
-        let room = Game.rooms[roomid];
-        if (!room) { continue; }
+      // Cache the shard name for quick comparisons
+      const shardName = Game.shard.name;
 
-        if (room.controller?.owner?.username != 'ricane') {
-            continue;
-        }
-        if (!room.memory.config || room.memory.config.type !== 'owned') {
-            continue;
-        }
-        if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
-            continue;
-        }
+      // Iterate over owned rooms only
+      for (const roomid in Game.rooms) {
+          const room = Game.rooms[roomid];
 
-        const towers = room.find<StructureTower>(FIND_MY_STRUCTURES, {
-        filter: { structureType: STRUCTURE_TOWER }
-        });
+          // Fast, early skips for non-relevant rooms
+          if (
+              !room ||
+              room.controller?.owner?.username !== "ricane" ||
+              !room.memory.config ||
+              room.memory.config.type !== "owned" ||
+              (room.memory.config.shard && room.memory.config.shard !== shardName)
+          ) {
+              continue;
+          }
 
-        //if (room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000) {
-            _.forEach(towers, function (tower) {
-                let jobFound = false;
+          // Cache all towers for this room at once
+          const towers = room.find<StructureTower>(FIND_MY_STRUCTURES, {
+              filter: { structureType: STRUCTURE_TOWER },
+          });
 
-                const closestHostile = tower.pos.findClosestByRange(FIND_HOSTILE_CREEPS);
-                if (closestHostile && !jobFound) {
-                    tower.attack(closestHostile);
-                    jobFound = true;
-                }
+          // Process tower actions in a single loop, minimize nested logic
+          if (towers.length) {
+              // Find closest hostile once for all towers
+              const hostiles = room.find(FIND_HOSTILE_CREEPS);
+              const closestHostilesMap: { [id: string]: Creep | null } = {};
+              for (const tower of towers) {
+                  closestHostilesMap[tower.id] = hostiles.length
+                      ? tower.pos.findClosestByRange(hostiles)
+                      : null;
+              }
 
-                const closestDamagedCreep = tower.pos.findClosestByRange(FIND_MY_CREEPS, {
-                    filter: structure => (structure.hits < structure.hitsMax)
-                });
+              // Find all damaged creeps and structures once
+              const damagedCreeps = room.find(FIND_MY_CREEPS, {
+                  filter: (creep) => creep.hits < creep.hitsMax,
+              });
+              const damagedStructures = room.find(FIND_STRUCTURES, {
+                  filter: (structure) =>
+                      structure.hits < structure.hitsMax &&
+                      structure.structureType !== STRUCTURE_WALL,
+              });
 
-                if (!jobFound && closestDamagedCreep) {
-                    tower.heal(closestDamagedCreep);
-                }
+              // Find worst structure for emergency repair once
+              let worststructure: AnyStructure | null = null;
+              if (
+                  (room.terminal && room.memory.nextTrade &&
+                      room.memory.nextTrade - Game.time <= 10) ||
+                  (room.storage &&
+                      room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 930000)
+              ) {
+                  for (const damageStructure of damagedStructures) {
+                      if (
+                          !worststructure ||
+                          worststructure.hitsMax - worststructure.hits <
+                          damageStructure.hitsMax - damageStructure.hits
+                      ) {
+                          worststructure = damageStructure;
+                      }
+                  }
+              }
 
-                const closestDamagedStructure = tower.pos.findClosestByRange(FIND_STRUCTURES, {
-                    filter: structure => (structure.hits < structure.hitsMax * 0.5 && structure.structureType !== STRUCTURE_WALL && structure.structureType !== STRUCTURE_RAMPART && structure.structureType !== STRUCTURE_CONTAINER)
-                        || (structure.hits < 200000 && (structure.structureType == STRUCTURE_WALL || structure.structureType == STRUCTURE_RAMPART))
-                });
+              for (const tower of towers) {
+                  let jobFound = false;
 
-                if (closestDamagedStructure && !jobFound) {
-                    tower.repair(closestDamagedStructure);
-                    jobFound = true;
-                }
+                  const closestHostile = closestHostilesMap[tower.id];
+                  if (closestHostile) {
+                      tower.attack(closestHostile);
+                      jobFound = true;
+                      continue;
+                  }
+/*
+                  const closestDamagedCreep = tower.pos.findClosestByRange(damagedCreeps);
+                  if (closestDamagedCreep && !jobFound) {
+                      tower.heal(closestDamagedCreep);
+                      jobFound = true;
+                      continue;
+                  }
+ */
+                  // Find heavily damaged non-wall/rampart structures
+                  const criticalDamagedStructure = tower.pos.findClosestByRange(
+                      room.find(FIND_STRUCTURES, {
+                          filter: (structure) =>
+                              (structure.hits < structure.hitsMax * 0.5 &&
+                                  structure.structureType !== STRUCTURE_WALL &&
+                                  structure.structureType !== STRUCTURE_RAMPART) ||
+                              (structure.hits < 200000 &&
+                                  //(//structure.structureType === STRUCTURE_WALL ||
+                                      structure.structureType === STRUCTURE_RAMPART)
+                      //),
+                      })
+                  );
 
-                if ((!jobFound && room.memory.nextTrade && (room.memory.nextTrade - Game.time) <= 10) || ((room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 930000))) {
-                    var damagedStructures = room.find(FIND_STRUCTURES, {
-                        filter: (structure) => structure.hits < structure.hitsMax
-                        && structure.structureType != STRUCTURE_WALL
-                    });
-                    let worststructure: AnyStructure | null = null;
-                    for (let dskey in damagedStructures) {
-                        let damageStructure = damagedStructures[dskey];
-                        if (worststructure == null) {
-                            worststructure = damageStructure;
-                        } else if ((worststructure.hitsMax - worststructure.hits) < (damageStructure.hitsMax - damageStructure.hits)) {
-                            worststructure = damageStructure;
-                        }
-                    }
-                    if (worststructure) {
-                        tower.repair(worststructure);
-                    }
-                }
-            });
-        //}
+                  if (criticalDamagedStructure && !jobFound) {
+                      tower.repair(criticalDamagedStructure);
+                      jobFound = true;
+                      continue;
+                  }
+                  // Emergency repair logic, only if needed
+                  if (worststructure && !jobFound) {
+                      tower.repair(worststructure);
+                  }
 
-        if (room.controller?.level >= 4 && towers.length > 0 && room.storage) {
-            let name = 'GroundSupport_' + room.name + '_' + 0;
-            let operator = new GroundSupport(name, room);
-            this.operationOperators.push(operator);
-        }
 
-        if (room.controller.level <= 4) {
-            let namerf = 'RoomFighter_' + room.name + '_' + 0;
-            let operatorrf = new RoomFighter(namerf, room, room.name, []);
-            this.operationOperators.push(operatorrf);
+              }
+          }
 
-            let namerh = 'RoomHealer_' + room.name + '_' + 0;
-            let operatorrh = new RoomHealer(namerh, room, namerf, room.name, []);
-            this.operationOperators.push(operatorrh);
-        }
-    }
+          // Operators: only create if room meets conditions
+          if (room.controller?.level >= 4 && towers.length > 0 && room.storage) {
+              this.operationOperators.push(
+                  new GroundSupport(`GroundSupport_${room.name}_0`, room)
+              );
+          }
+
+          if (room.controller.level <= 4) {
+              const namerf = `RoomFighter_${room.name}_0`;
+              this.operationOperators.push(
+                  new RoomFighter(namerf, room, room.name, [])
+              );
+
+              const namerh = `RoomHealer_${room.name}_0`;
+              this.operationOperators.push(
+                  new RoomHealer(namerh, room, namerf, room.name, [])
+              );
+          }
+      }
   }
 
   public roleCall() {

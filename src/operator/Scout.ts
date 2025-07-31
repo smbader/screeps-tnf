@@ -3,7 +3,7 @@ import { Operator } from "../classes/operator";
 
 interface ScoutMemory extends CreepMemory {
     targetRoom: string;
-    waypoint: number | null;
+    waypoint: number | undefined;
 }
 
 export class ScoutCreep extends Creep {
@@ -67,7 +67,7 @@ export class Scout extends Operator {
             }
         }
 
-        let roomPos = new RoomPosition(2, 5, this.creep.memory.targetRoom)
+        let roomPos = new RoomPosition(20, 5, this.creep.memory.targetRoom)
         if (this.creep.pos.getRangeTo(roomPos) > 10) {
             this.creep.travelTo(roomPos);
         }

@@ -10,7 +10,8 @@ export class ExpansionManagement extends Operation {
 
     operationOperators:Operator[];
     expansionRooms:any[] = [
-        { target: 'W4N1', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] }
+        //{ target: 'W4N1', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
+        //{ target: 'W4N1', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] }
         //{ target: 'W13S6', source: 'W19S6', forcespawn: false, waypoints: [ { 'room': 'W17S7', 'x': 27, 'y': 9 , 'shard': 0} , { 'room': 'W13S7', 'x': 27, 'y': 9 , 'shard': 0} ] }
         //{ target: 'W19S6', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W10S0', 'x': 14, 'y': 22 , 'shard': 3}, { 'room': 'W10S0', 'x': 10, 'y': 8, 'shard': 2 }, { 'room': 'W10S0', 'x': 9, 'y': 20, 'shard': 1 }, { 'room': 'W20S6', 'x': 38, 'y': 4, 'shard': 0 }, { 'room': 'W19S6', 'x': 20, 'y': 20, 'shard': 0 } ] }
         //{ target: 'W19S6', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W12N0', 'x': 19, 'y': 48 , 'shard': 3}, { 'room': 'W12S0', 'x': 48, 'y': 14 , 'shard': 3}, { 'room': 'W10S0', 'x': 14, 'y': 22 , 'shard': 3}, { 'room': 'W10S0', 'x': 10, 'y': 8, 'shard': 2 }, { 'room': 'W10S0', 'x': 9, 'y': 20, 'shard': 1 }, { 'room': 'W20S6', 'x': 38, 'y': 4, 'shard': 0 }, { 'room': 'W19S6', 'x': 20, 'y': 20, 'shard': 0 } ] }
@@ -101,11 +102,11 @@ export class ExpansionManagement extends Operation {
                             }
 
                             if (operationOperator instanceof Claimer) {
-                                //if (Game.rooms[operationOperator.memory.targetroom] &&
-                                //   Game.rooms[operationOperator.memory.targetroom].controller?.owner?.username !== 'ricane') {
+                                if (Game.rooms[operationOperator.memory.targetroom] &&
+                                   Game.rooms[operationOperator.memory.targetroom].controller?.owner?.username !== 'ricane') {
                                     console.log(`    Spawning: ` +  operationOperator.name);
                                     spawn.spawnCreep([MOVE, CLAIM], operationOperator.name, {directions: [spawnDirection]});
-                                //}
+                                }
                             }
 
                             if (operationOperator instanceof RemoteWorker) {

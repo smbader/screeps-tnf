@@ -5,7 +5,7 @@ import {MapHelper} from "../utils/MapHelper";
 interface RoomFighterMemory extends CreepMemory {
     targetRoom: string;
     target?: Id<any> | null;
-    waypoint: number | null;
+    waypoint: number | undefined;
 }
 
 export class RoomFighterCreep extends Creep {

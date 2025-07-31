@@ -1,6 +1,4 @@
-import { extend } from "lodash";
 import { Operator } from "../classes/operator";
-import {MapHelper} from "../utils/MapHelper";
 
 interface GeologistMemory extends CreepMemory {
     targetRoom: string;
@@ -10,109 +8,119 @@ interface GeologistMemory extends CreepMemory {
 export class GeologistCreep extends Creep {
     memory!: GeologistMemory;
 
-    constructor(creepid: any, targetRoom: string) {
+    constructor(creepid: Id<Creep>, targetRoom: string) {
         super(creepid);
-
-        const baseMemory: CreepMemory = super.memory;
-        this.memory.room = baseMemory.room;
         this.memory.targetRoom = targetRoom;
     }
 }
 
-// An operator is a screep who performs an operation.
 export class Geologist extends Operator {
-
     creep: GeologistCreep | null;
 
     constructor(name: string, room: Room) {
         super(name, room);
-
-        if (Game.creeps[this.name]) {
-            this.creep = new GeologistCreep(Game.creeps[this.name].id, room.name);
-        } else {
-            this.creep = null;
-        }
+        const creepObj = Game.creeps[name];
+        this.creep = creepObj ? new GeologistCreep(creepObj.id, room.name) : null;
         this.room = room;
     }
 
     actions() {
+        const creep = this.creep;
+        if (!creep) return;
 
-        // Creep may not exist yet.
-        if (!this.creep) {
+        // Recompute working state based on creep's store
+        if (creep.store.getFreeCapacity() === 0) {
+            creep.memory.working = false;
+        }
+        if (creep.store.getUsedCapacity() === 0 && creep.memory.working === false) {
+            creep.memory.working = true;
+        }
+
+        // --- Harvesting minerals ---
+        if (creep.memory.working) {
+            if (creep.ticksToLive && creep.ticksToLive < 60) {
+                // Offload before death
+                creep.memory.working = false;
+                creep.memory.target = null;
+                return;
+            }
+            // Select mineral target if none
+            if (!creep.memory.target) {
+                const mineral = this.room.find(FIND_MINERALS)[0];
+                if (mineral) {
+                    // Check for extractor present
+                    const hasExtractor = mineral.pos.lookFor(LOOK_STRUCTURES)
+                        .some(s => s.structureType === STRUCTURE_EXTRACTOR);
+                    if (hasExtractor) {
+                        creep.memory.target = mineral.id;
+                    }
+                }
+                return;
+            }
+            // Harvest from mineral
+            const mineral = Game.getObjectById<Mineral>(creep.memory.target);
+            if (mineral) {
+                const result = creep.harvest(mineral);
+                if (result === ERR_NOT_IN_RANGE) {
+                    creep.travelTo(mineral.pos);
+                } else if (result !== OK) {
+                    creep.memory.target = null;
+                }
+            } else {
+                creep.memory.target = null;
+            }
+            if (creep.store.getFreeCapacity() === 0) {
+                creep.memory.working = false;
+                creep.memory.target = null;
+            }
             return;
         }
 
-        // While you're harvesting continue until you're full.
-        if (this.creep.memory.working == true) {
-
-            if (this.creep.ticksToLive && this.creep.ticksToLive < 60) {
-                // Need to offload before death.
-                this.creep.memory.working = false;
-                this.creep.memory.target = null;
+        // --- Offloading minerals ---
+        if (!creep.memory.target) {
+            // Find closest storage or terminal with available space
+            const targets = this.room.find(FIND_STRUCTURES, {
+                filter: (s: Structure) =>
+                    (s.structureType === STRUCTURE_STORAGE || s.structureType === STRUCTURE_TERMINAL) &&
+                    (s as StructureStorage | StructureTerminal).store.getFreeCapacity() > 0
+            }) as (StructureStorage | StructureTerminal)[];
+            if (targets.length > 0) {
+                // Prefer storage over terminal
+                const storage = targets.find(t => t.structureType === STRUCTURE_STORAGE) || targets[0];
+                creep.memory.target = storage.id;
             }
-
-            if (this.creep.memory.target == null) {
-
-                let mineral = this.creep.room.find(FIND_MINERALS)[0];
-                let extractor = mineral.pos.lookFor(LOOK_STRUCTURES);
-
-                if (extractor.length == 1) {
-                    this.creep.memory.target = mineral.id;
-                }
-                return;
-
-            } else {
-
-                let target = Game.getObjectById(this.creep.memory.target);
-                let actionresult = this.creep.harvest(target);
-
-                if (actionresult == ERR_NOT_IN_RANGE) {
-                    if (this.creep.travelTo(target.pos) == ERR_NO_PATH) {
-                        return;
-                    }
-                } else if (actionresult == ERR_INVALID_TARGET) {
-                    this.creep.memory.target = null
-                } else if (this.creep.store.getUsedCapacity() == this.creep.store.getCapacity()) {
-                    this.creep.memory.working = false;
-                    this.creep.memory.target = null;
-                }
-                return;
-            }
-
-        } else {
-
-            if (this.creep.memory.target == null) {
-
-                let target = this.creep.pos.findClosestByPath<StructureContainer>(FIND_STRUCTURES, {
-                    filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE)
-                });
-
-                if (target) {
-                    this.creep.memory.target = target.id;
-                }
-
-            } else {
-
-                let target = Game.getObjectById(this.creep.memory.target);
-                let actionresult;
-                for(const resourceType in this.creep.store) {
-                    actionresult = this.creep.transfer(target, <"energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence">resourceType);
-                }
-
-                if (actionresult == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(target.pos);
-                } else if (actionresult == ERR_FULL) {
-                    this.creep.memory.target = null;
-                } else if (this.creep.store.getUsedCapacity() == 0) {
-                    this.creep.memory.target = null;
-                    this.creep.memory.working = true;
-                } else if (actionresult == OK) {
-
-                }
-            }
+            return;
         }
 
+        // Transfer all resources in creep's store to target
+        const target = Game.getObjectById<StructureStorage | StructureTerminal>(creep.memory.target);
+        if (target) {
+            let transferred = false;
+            for (const resourceType in creep.store) {
+                if (creep.store[resourceType as ResourceConstant] > 0) {
+                    const result = creep.transfer(target, resourceType as ResourceConstant);
+                    if (result === ERR_NOT_IN_RANGE) {
+                        creep.travelTo(target.pos);
+                        return;
+                    } else if (result === ERR_FULL) {
+                        creep.memory.target = null;
+                        return;
+                    } else if (result === OK) {
+                        transferred = true;
+                        // Only transfer one resource per tick for efficiency
+                        break;
+                    }
+                }
+            }
+            // If nothing left to transfer, reset state
+            if (creep.store.getUsedCapacity() === 0) {
+                creep.memory.target = null;
+                creep.memory.working = true;
+            }
+            return;
+        } else {
+            // Target is gone; reset and retry next tick
+            creep.memory.target = null;
+        }
     }
-
-
 }

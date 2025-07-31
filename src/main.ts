@@ -18,12 +18,17 @@ declare global {
   interface Memory {
     uuid: number;
     log: any;
+    marketPriceHistory:any;
+    squadSiege?:any;
   }
 
   interface CreepMemory {
     role: string;
     room: string;
     working: boolean;
+    squadId?: string;
+    waypoint?: number;
+    operation?: string;
     _travel?: any;
   }
 
@@ -101,7 +106,11 @@ export const loop = ErrorMapper.wrapLoop(() => {
     // Takes evalution of what operation and tasks are needed.
       try {
           //console.log(operation.name);
+          let beforeCpu = Game.cpu.getUsed();
           operation.init();
+          if (Game.shard.name == 'shard3') {
+              console.log(`INIT ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+          }
       } catch (error: any) {
         console.log(error);
       }
@@ -113,7 +122,11 @@ export const loop = ErrorMapper.wrapLoop(() => {
   for (let operation of operations) {
       try {
           //console.log(operation.name);
+          let beforeCpu = Game.cpu.getUsed();
           operation.roleCall();
+          if (Game.shard.name == 'shard3') {
+              console.log(`ROLECALL ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+          }
       } catch (e) {
           console.log(e);
       }
@@ -130,9 +143,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
       } catch (e) {
           console.log(e);
       }
-
-      //console.log(`Tick CPU Usage: ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
-
+      if (Game.shard.name == 'shard3') {
+          console.log(`ACTIONS ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+      }
       let tickCPULimit = Game.cpu.shardLimits[Game.shard.name];
       if (Game.cpu.bucket < 5000) {
           tickCPULimit = (Game.cpu.shardLimits[Game.shard.name] - 15.5);
@@ -151,9 +164,10 @@ export const loop = ErrorMapper.wrapLoop(() => {
       ct ++;
   }
 
-    /////console.log(` `);
-    /*
+    console.log(` `);
+
     for (var roomid in Memory.rooms) {
+
         let room = Game.rooms[roomid];
         if (!room) { continue; }
         if (room.controller?.owner?.username != 'ricane') {
@@ -162,15 +176,20 @@ export const loop = ErrorMapper.wrapLoop(() => {
         if (!room.memory.config || room.memory.config.type !== 'owned') {
             continue;
         }
-        let storageEnergy = 0;
-        if (room.storage) {
-            storageEnergy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
+        if ((room.memory.nextTrade) + 10 < Game.time ) {
+            room.memory.nextTrade = Game.time + (Math.floor(Math.random() * (300 - 250 + 1)) + 250);
         }
+        //let storageEnergy = 0;
+        //if (room.storage) {
+        //    storageEnergy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
+        //}
         //console.log(room.name + ' (' + room.controller.level + ') ' +
         //    'Room Counter: ' + (room.memory.nextTrade - Game.time) + ' ' +
+        //    'Next Trade: ' + room.memory.nextTrade + ' ' +
+        //    'Game.time: ' + Game.time + ' ' +
         //    'Storage Energy: ' + storageEnergy + ' ' +
         //    'Terminal Energy: ' + room.memory.data.terminal.energy);
-    }*/
+    }
 
     if (Game.cpu.bucket < 9000) {
         console.log('[' + Game.shard.name + '] ' + `Tick CPU Usage: ${Game.cpu.getUsed().toFixed(2)}` + ` CPU Bucket: ` + Game.cpu.bucket);

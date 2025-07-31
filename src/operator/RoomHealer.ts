@@ -6,7 +6,7 @@ interface RoomHealerMemory extends CreepMemory {
     targetFighter: string;
     targetRoom: string;
     target?: Id<any> | null;
-    waypoint: number | null;
+    waypoint: number | undefined;
 }
 
 export class RoomHealerCreep extends Creep {

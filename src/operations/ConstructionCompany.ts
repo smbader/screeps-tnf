@@ -74,6 +74,9 @@ export class ConstructionCompany extends Operation {
           if (!(operationOperator.room.memory.nextTrade && (operationOperator.room.memory.nextTrade - 50) < Game.time)) {
               continue;
           }
+          if (Game.cpu.bucket < 5000) {
+              continue;
+          }
 
         if (spawns.length === 0) {
           continue;
@@ -135,7 +138,9 @@ export class ConstructionCompany extends Operation {
           if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
               continue;
           }
-
+          if (Game.cpu.bucket < 5000) {
+              continue;
+          }
           if (!(room.memory.nextTrade && ((room.memory.nextTrade - Game.time) % 30 == 0))) {
               continue;
           }

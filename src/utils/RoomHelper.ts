@@ -15,6 +15,7 @@ import { W18S13 } from "../roomconfigs/W18S13";
 import { W17S13 } from "../roomconfigs/W17S13";
 import { W18S14 } from "../roomconfigs/W18S14";
 import { W4N1 } from "../roomconfigs/W4N1";
+import { W3N1 } from "../roomconfigs/W3N1";
 
 export var RoomHelper = {
 
@@ -263,9 +264,9 @@ export var RoomHelper = {
         }
 
         */
-        if (Game.rooms['W18S14']) {
-            let dataW18S14 = W18S14.getConfig();
-            Game.rooms['W18S14'].memory.config = dataW18S14;
+        if (Game.rooms['W3N1']) {
+            let dataW3N1 = W3N1.getConfig();
+            Game.rooms['W3N1'].memory.config = dataW3N1;
         }
         if (Game.rooms['W17S13']) {
             let dataW17S13 = W17S13.getConfig();

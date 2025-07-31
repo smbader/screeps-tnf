@@ -8,7 +8,8 @@ export class RemoteAttack extends Operation {
 
     operationOperators:Operator[];
     attackRooms:any[] = [
-        { target: 'W4N1', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] }
+        ////{ target: 'W4N1', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
+        { target: 'W4N2', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3}, { 'room': 'W4N2', 'x': 2, 'y': 48 , 'shard': 3} ] }
     ];
 
     constructor() {
@@ -42,13 +43,18 @@ export class RemoteAttack extends Operation {
 
            // }
 
-            let nameranger = 'RoomArcher_' + attackRoom.target + '_' + 0;
+            let nameranger = 'RoomArcher_' + 0;
             let operatorranger = new RoomArcher(nameranger, sourceRoom, attackRoom.target, attackRoom.waypoints);
             this.operationOperators.push(operatorranger);
 
-            let nameranger1 = 'RoomArcher_' + attackRoom.target + '_' + 1;
+            let nameranger1 = 'RoomArcher_' + 1;
             let operatorranger1 = new RoomArcher(nameranger1, sourceRoom, attackRoom.target, attackRoom.waypoints);
             this.operationOperators.push(operatorranger1);
+
+            //let nameranger2 = 'RoomArcher_' + attackRoom.target + '_' + 2;
+            //let operatorranger2 = new RoomArcher(nameranger2, sourceRoom, attackRoom.target, attackRoom.waypoints);
+            //this.operationOperators.push(operatorranger2);
+
 
         }
     }
@@ -61,7 +67,7 @@ export class RemoteAttack extends Operation {
             var creepOperator = Game.creeps[operationOperator.name];
 
             if (creepOperator) {
-                console.log(`    Clocking in: ` + operationOperator.name + ' (' + creepOperator.ticksToLive + ')');
+                //console.log(`    Clocking in: ` + operationOperator.name + ' (' + creepOperator.ticksToLive + ')');
             } else {
 
                 if (!operationOperator.room) {
@@ -99,10 +105,11 @@ export class RemoteAttack extends Operation {
                             //}
                             if (operationOperator instanceof RoomArcher) {
                                 spawn.spawnCreep([
+                                    TOUGH, TOUGH,
                                     RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK,
                                     RANGED_ATTACK, RANGED_ATTACK,
                                     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
-                                    MOVE, MOVE,
+                                    MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
                                     HEAL, HEAL, HEAL, HEAL, HEAL, HEAL
                                 ], operationOperator.name, { directions: [spawnDirection]});
                             }

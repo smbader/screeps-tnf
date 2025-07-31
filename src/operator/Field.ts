@@ -1,9 +1,8 @@
 import { Operator } from "../classes/operator";
 import { MapHelper } from "../utils/MapHelper";
-import { filter } from "lodash";
 
-type FieldStructure = StructureSpawn|StructureExtension|StructureStorage|StructureContainer|StructureLink|StructureTerminal;
-type StoreStructure = StructureTower|StructureSpawn|StructureExtension|StructureLink;
+type FieldStructure = StructureSpawn | StructureExtension | StructureStorage | StructureContainer | StructureLink | StructureTerminal | StructureTower;
+type StoreStructure = StructureTower | StructureSpawn | StructureExtension | StructureLink;
 
 interface FieldMemory extends CreepMemory {
     fieldIndex: Number;
@@ -13,7 +12,6 @@ interface FieldMemory extends CreepMemory {
 
 export class FieldCreep extends Creep {
     memory!: FieldMemory;
-
     constructor(creepid: any) {
         super(creepid);
     }
@@ -25,10 +23,10 @@ export class Field extends Operator {
         roomname?: string;
         name?: string;
         fieldindex?: number;
-        spawn?: { x:number, y:number };
+        spawn?: { x: number, y: number };
         spawndirection: DirectionConstant;
-        sources?: [ { x:number, y:number } ];
-        containers?: [ { x:number, y:number } ];
+        sources?: [{ x: number, y: number }];
+        containers?: [{ x: number, y: number }];
         containeridx: number;
     };
 
@@ -36,7 +34,6 @@ export class Field extends Operator {
 
     constructor(name: string, room: Room, fieldIndex: number) {
         super(name, room);
-
         this.memory = {
             spawndirection: room.memory.config['field' + fieldIndex].spawndirection,
             containeridx: 0,
@@ -47,7 +44,6 @@ export class Field extends Operator {
 
         if (Game.creeps[this.name]) {
             this.creep = new FieldCreep(Game.creeps[this.name].id);
-
         } else {
             this.creep = null;
         }
@@ -55,111 +51,129 @@ export class Field extends Operator {
     }
 
     actions() {
+        let lastcpucheck = Game.cpu.getUsed();
         // Creep may not exist yet.
-        if (!this.creep) {
-            return;
-        }
+        const creep = this.creep;
+        if (!creep) return;
 
-        if (this.creep.store[RESOURCE_ENERGY] == this.creep.store.getCapacity()) {
-            this.creep.memory.working = false;
-        }
-        if (this.creep.store[RESOURCE_ENERGY] == 0 && this.creep.memory.working == false) {
-            this.creep.memory.working = true;
-        }
+        // Cache memory and config references for reuse
+        const mem = creep.memory;
+        const config = this.room.memory.config['field' + this.memory.fieldindex];
+        const parkPos = new RoomPosition(config.parkingspot.x, config.parkingspot.y, this.room.name);
 
-        // While you're harvesting continue until you're full.
-        if (this.creep.memory.working == null || this.creep.memory.working == true) {
+        // State management - avoid deep comparisons
+        if (creep.store[RESOURCE_ENERGY] === creep.store.getCapacity()) mem.working = false;
+        if (creep.store[RESOURCE_ENERGY] === 0 && mem.working === false) mem.working = true;
 
-            let sources = this.room.memory.config['field' + this.memory.fieldindex].sources;
+        // --- HARVESTING/RETRIEVAL (working === true) ---
+        if (mem.working == null || mem.working === true) {
+            const sources = config.sources;
+            let foundTarget = false;
 
-            for (let i = this.memory.containeridx; i < sources.length; i++) {
-
-                let target = this.creep.pos.findClosestByPath<FieldStructure>(FIND_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.pos.x === sources[i].x && structure.pos.y === sources[i].y &&
-                            (structure.structureType == STRUCTURE_LINK ||
-                                structure.structureType == STRUCTURE_STORAGE) &&
-                            structure.store.getUsedCapacity(RESOURCE_ENERGY) > 0;
+            const potentialTargets: FieldStructure[] = [];
+            for (const src of sources) {
+                const structure = this.room.find<FieldStructure>(FIND_STRUCTURES, {filter: (structure) => {
+                    return (
+                            structure.structureType === STRUCTURE_LINK ||
+                            structure.structureType === STRUCTURE_STORAGE ||
+                            structure.structureType === STRUCTURE_CONTAINER ||
+                            structure.structureType === STRUCTURE_TERMINAL
+                        ) &&
+                        ((structure as AnyStoreStructure).store?.getUsedCapacity(RESOURCE_ENERGY) > 0) &&
+                        (src.x === structure.pos.x && src.y === structure.pos.y)
                     }
                 });
-                if (target) {
-                    const result = this.creep.withdraw(target, RESOURCE_ENERGY);
-                    this.creep.say('🏗️');
-                    if (result == ERR_NOT_IN_RANGE) {
-                        this.creep.travelTo(target.pos);
-                        this.creep.say('🚚');
-                        Game.map.visual.line(this.creep.pos, target.pos,
-                            {color: '#ff0000', lineStyle: 'dashed'});
-                        return;
-                    } else if (result == OK) {
-                        return;
-                    }
+                if (structure.length > 0) potentialTargets.push(structure[0]);
+            }
+            let target: Structure | null = null;
+            if (potentialTargets.length > 0) {
+                target = creep.pos.findClosestByPath(potentialTargets);
+            }
+            if (target) {
+                const result = creep.withdraw(target, RESOURCE_ENERGY);
+                if (result === ERR_NOT_IN_RANGE) {
+                    creep.travelTo(target.pos);
+                    Game.map.visual.line(creep.pos, target.pos, { color: "#ff0000", lineStyle: "dashed" });
                 }
+                foundTarget = true;
             }
 
-            // IF I CAN'T FIND MY LISTED SOURCES
-            if (this.creep.room.controller && this.creep.room.controller.level < 5) {
-                const target = this.creep.pos.findClosestByRange<FieldStructure>(FIND_STRUCTURES, {
-                    filter: structure => (structure.structureType == STRUCTURE_CONTAINER || structure.structureType == STRUCTURE_STORAGE)
-                        && structure.store[RESOURCE_ENERGY] > 0
+            // If no direct source targets found, fallback for low level rooms
+            if (!foundTarget && creep.room.controller?.level && creep.room.controller.level < 5) {
+                const containerOrStorage = creep.room.find(FIND_STRUCTURES, {
+                    filter: structure =>
+                        (structure.structureType === STRUCTURE_CONTAINER || structure.structureType === STRUCTURE_STORAGE) &&
+                        (structure as AnyStoreStructure).store?.getUsedCapacity(RESOURCE_ENERGY) > 0
                 });
-                if (target) {
-                    const result = this.creep.withdraw(target, RESOURCE_ENERGY);
-                    if (result == ERR_NOT_IN_RANGE) {
-                        this.creep.travelTo(target.pos);
-                        this.creep.say('🚚');
-                        Game.map.visual.line(this.creep.pos, target.pos, {color: '#ff0000', lineStyle: 'dashed'});
-                        return;
-                    } else if (result == ERR_NOT_ENOUGH_ENERGY) {
-                        this.creep.travelTo(this.room.memory.config.chemist.parking.x, this.room.memory.config.chemist.parking.y);
-                        return;
-                    } else if (result == OK) {
-                        return;
+                if (containerOrStorage.length > 0) {
+                    const result = creep.withdraw(containerOrStorage[0], RESOURCE_ENERGY);
+                    if (result === ERR_NOT_IN_RANGE) {
+                        creep.travelTo(containerOrStorage[0].pos);
+                        Game.map.visual.line(creep.pos, containerOrStorage[0].pos, { color: "#ff0000", lineStyle: "dashed" });
+                    } else if (result === ERR_NOT_ENOUGH_ENERGY) {
+                        const chemistPark = this.room.memory.config.chemist?.parking;
+                        if (chemistPark) {
+                            creep.travelTo(new RoomPosition(chemistPark.x, chemistPark.y, this.room.name));
+                        }
                     }
-                    this.creep.say('w' + result);
-                }
-            }
-
-            this.creep.travelTo(new RoomPosition(this.room.memory.config['field' + this.memory.fieldindex].parkingspot.x,
-                this.room.memory.config['field' + this.memory.fieldindex].parkingspot.y, this.room.name));
-            this.creep.say('💤');
-            // END
-
-        } else {
-
-
-            let containers = this.room.memory.config['field' + this.memory.fieldindex].containers;
-
-            //for (let i = this.memory.containeridx; i < containers.length; i++) {
-            for (let i = 0; i < containers.length; i++) {
-
-                var targets = this.creep.room.find<FieldStructure>(FIND_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.pos.x === containers[i].x && structure.pos.y === containers[i].y &&
-                            (structure.structureType == STRUCTURE_EXTENSION ||
-                                structure.structureType == STRUCTURE_SPAWN ||
-                                structure.structureType == STRUCTURE_TOWER ||
-                                structure.structureType == STRUCTURE_LINK ||
-                                structure.structureType == STRUCTURE_TERMINAL) &&
-                            structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0;
-                    }
-                });
-
-                if (targets.length > 0) {
-                    let result = this.creep.transfer(targets[0], RESOURCE_ENERGY);
-                    if (result == ERR_NOT_IN_RANGE) {
-                        this.creep.travelTo(targets[0].pos);
-                        this.creep.say('🛢️');
-                        return;
-                    } else if (result == OK) {
-                        return;
+                } else {
+                    if (creep.pos.x != parkPos.x && creep.pos.y != parkPos.y) {
+                        creep.travelTo(parkPos);
                     }
                 }
+            } else if (!foundTarget) {
+                // If no work to do, park
+                if (creep.pos.x != parkPos.x && creep.pos.y != parkPos.y) {
+                    creep.travelTo(parkPos);
+                }
             }
-            this.creep.travelTo(new RoomPosition(this.room.memory.config['field' + this.memory.fieldindex].parkingspot.x,
-                this.room.memory.config['field' + this.memory.fieldindex].parkingspot.y, this.room.name));
-            this.creep.say('💤');
+        }
 
+        // --- DELIVERY (working === false) ---
+        else {
+
+            const containers = config.containers;
+            // Batch all structures once for efficient filtering
+            const structures = this.room.find<FieldStructure>(FIND_STRUCTURES, {
+                filter: (structure) => {
+                    return (
+                        structure.structureType === STRUCTURE_EXTENSION ||
+                        structure.structureType === STRUCTURE_SPAWN ||
+                        structure.structureType === STRUCTURE_LINK ||
+                        structure.structureType === STRUCTURE_TOWER ||
+                        structure.structureType === STRUCTURE_TERMINAL
+                    ) &&
+                        (structure as AnyStoreStructure).store?.getFreeCapacity(RESOURCE_ENERGY) > 0
+                }
+            });
+
+            let foundTarget = false;
+            let target = null;
+            // looping through all empty containers in the room
+            for (let i = 0; i < structures.length; i++) {
+                for (let j = 0; j < containers.length; j++) {
+                    if (containers[j].x == structures[i].pos.x && containers[j].y == structures[i].pos.y) {
+                        target = structures[i];
+                        foundTarget = true;
+                        break
+                    }
+                }
+                if (foundTarget) {break;}
+            }
+            if (target) {
+                const result = creep.transfer(target, RESOURCE_ENERGY);
+                if (result === ERR_NOT_IN_RANGE) {
+                    creep.travelTo(target.pos);
+                }
+                return;
+            }
+
+            if (!foundTarget) {
+
+                if (creep.pos.x != parkPos.x && creep.pos.y != parkPos.y) {
+                    creep.travelTo(parkPos);
+                }
+            }
         }
     }
 }

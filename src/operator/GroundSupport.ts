@@ -2,6 +2,11 @@ import {filter} from "lodash";
 import {Operator} from "../classes/operator";
 import {MapHelper} from "../utils/MapHelper";
 
+// Screeps constants are available
+declare const REACTIONS: { [reagent1: string]: { [reagent2: string]: string } };
+declare const LAB_REACTIONS: { [compound: string]: [string, string] };
+declare const TIER3_COMPOUNDS: string[]; // e.g. ["XGH2O", "XLHO2", ...] You can define this array if not present.
+
 type FieldStructure = StructureSpawn|StructureExtension|StructureStorage|StructureContainer|StructureLink|StructureTerminal|StructureTower|StructureLab|StructureNuker|StructureFactory|StructurePowerSpawn;
 type StoreStructure = StructureTower|StructureSpawn|StructureExtension|StructureLink;
 type GSResourceTypes = "energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence";
@@ -20,6 +25,47 @@ export class GroundSupportCreep extends Creep {
     constructor(creepid: any) {
         super(creepid);
     }
+}
+
+// Helper: All tier 3 compounds, for reference
+const TIER3_LIST: string[] = [
+    "XGH2O", "XGHO2", "XKH2O", "XKHO2", "XLH2O", "XLHO2",
+    "XZH2O", "XZHO2", "XUH2O", "XUHO2"
+];
+
+// Helper: Recursively get the missing ingredients for a target compound
+function getMissingIngredients(room: Room, compound: string, amount: number, visited: Set<string> = new Set()): string[] {
+    // Prevent infinite loops
+    if (visited.has(compound)) return [];
+    visited.add(compound);
+
+    // If in storage or terminal, and we have enough, done
+    const storage = room.storage;
+    const terminal = room.terminal;
+    let available = 0;
+    if (storage) available += storage.store.getUsedCapacity(compound as ResourceConstant) || 0;
+    if (terminal) available += terminal.store.getUsedCapacity(compound as ResourceConstant) || 0;
+    if (available >= amount) return [];
+
+    // If raw mineral, cannot make, must mine or buy
+    if (!getReactants(compound)) return [compound];
+
+    // Otherwise, return the missing ingredients recursively
+    const [a, b] = getReactants(compound)!;
+    let missing: string[] = [];
+    missing = missing.concat(getMissingIngredients(room, a, amount, visited));
+    missing = missing.concat(getMissingIngredients(room, b, amount, visited));
+    return missing;
+}
+
+// Helper: Find reactants for a given product (traverse REACTIONS)
+function getReactants(product: string): [string, string] | null {
+    for (const a in REACTIONS) {
+        for (const b in REACTIONS[a]) {
+            if (REACTIONS[a][b] === product) return [a, b];
+        }
+    }
+    return null;
 }
 
 // An operator is a screep who performs an operation.
@@ -305,7 +351,7 @@ export class GroundSupport extends Operator {
 
             let terminalEnergy = this.creep.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY)
 
-            if (terminalEnergy > storageEnergy && storageEnergy < 50000) {
+            if (terminalEnergy > storageEnergy && storageEnergy < 300000) {
                 //console.log('[' + this.creep.room.name + '] Add to storage.');
                 this.creep.memory.sourceContainer = this.creep.room.terminal.id;
                 this.creep.memory.targetContainer = this.creep.room.storage.id;
@@ -362,6 +408,21 @@ export class GroundSupport extends Operator {
                     return;
                 }
             }
+            if (this.creep.room.terminal.store.getUsedCapacity(RESOURCE_GHODIUM) > 0) {
+                let nukers = this.creep.room.find<StructureNuker>(FIND_MY_STRUCTURES, {
+                    filter: (structure) => {
+                        return structure.structureType == STRUCTURE_NUKER
+                            && structure.store.getFreeCapacity(RESOURCE_GHODIUM) > 0;
+                    }
+                });
+                if (nukers && nukers.length > 0) {
+                    this.creep.memory.sourceContainer = this.creep.room.terminal.id;
+                    this.creep.memory.targetContainer = nukers[0].id;
+                    this.creep.memory.resourceType = RESOURCE_GHODIUM;
+                    this.creep.memory.phase = 'inprogress';
+                    return;
+                }
+            }
 
             if (storageEnergy > 200000) {
                 let powerspawns = this.creep.room.find<StructurePowerSpawn>(FIND_MY_STRUCTURES, {
@@ -411,7 +472,8 @@ export class GroundSupport extends Operator {
                 }
             }
 
-
+            // ---- LAB REACTION PRIORITY (lowest priority: placed just before sleep/parking) ----
+            this.handleLabReactions();
 
             // Nothing to do?  Renew myself.
 
@@ -420,142 +482,117 @@ export class GroundSupport extends Operator {
 
         }
 
+    }
 
-/*
+    // --- New helper function for lab reactions ---
+    handleLabReactions() {
+        const creep = this.creep;
+        const room = this.room;
+        if (!creep || !room.terminal || !room.storage) return;
 
-        let storage = this.creep.room.storage;
-        if (!storage) {
-            return;
-        }
-        let storageEnergy = storage.store.getUsedCapacity(RESOURCE_ENERGY)
+        // 1. Identify all labs
+        const allLabs: StructureLab[] = room.find(FIND_MY_STRUCTURES, { filter: s => s.structureType === STRUCTURE_LAB }) as StructureLab[];
+        if (allLabs.length < 3) return; // Need at least 3 labs for reactions
 
-        // IF STORAGE NEEDS ENERGY
-        if (this.creep.room.terminal && this.creep.room.storage &&
-            this.creep.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) > storageEnergy &&
-            storageEnergy < 50000) {
-
-            if (this.creep.room.name == 'W15N3') { console.log ( 'Storage'); }
-            // While you're harvesting continue until you're full.
-            if (this.creep.memory.working == null || this.creep.memory.working == true) {
-
-                const result = this.creep.withdraw(this.creep.room.terminal, RESOURCE_ENERGY);
-
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(this.creep.room.terminal.pos);
-                    return;
-                } else if (result == ERR_NOT_ENOUGH_ENERGY) {
-                    return;
-                } else if (result == OK) {
-                    return;
+        // 2. Find the two input labs (within range 2 of all others)
+        let inputLabs: [StructureLab, StructureLab] | null = null;
+        for (let i = 0; i < allLabs.length; i++) {
+            for (let j = i + 1; j < allLabs.length; j++) {
+                const labA = allLabs[i];
+                const labB = allLabs[j];
+                let allInRange = true;
+                for (const lab of allLabs) {
+                    if (lab.id === labA.id || lab.id === labB.id) continue;
+                    if (labA.pos.getRangeTo(lab) > 2 && labB.pos.getRangeTo(lab) > 2) {
+                        allInRange = false;
+                        break;
+                    }
                 }
-
-            } else {
-
-                let result = this.creep.transfer(storage, RESOURCE_ENERGY);
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(storage.pos);
-                    return;
-                } else if (result == OK) {
-                    return;
+                if (allInRange) {
+                    inputLabs = [labA, labB];
+                    break;
                 }
             }
+            if (inputLabs) break;
         }
+        if (!inputLabs) return;
 
+        // 3. Decide which Tier3 to make (pick next unfinished in TIER3_LIST)
+        let targetCompound: string | null = null;
+        for (const t3 of TIER3_LIST) {
+            // If there isn't at least 1000 in storage+terminal, we want to make more
+            let total = 0;
+            if (room.storage) total += room.storage.store.getUsedCapacity(t3 as ResourceConstant) || 0;
+            if (room.terminal) total += room.terminal.store.getUsedCapacity(t3 as ResourceConstant) || 0;
+            if (total < 1000) {
+                targetCompound = t3;
+                break;
+            }
+        }
+        if (!targetCompound) return; // All done
 
-
-        // IF TERMINAL NEEDS ENERGY
-        if (this.creep.room.terminal && this.creep.room.storage &&
-            this.creep.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) < 35000 &&
-            storageEnergy > 100000) {
-
-            //if (this.creep.room.name == 'W15N3') { console.log ( 'Terminal'); }
-            // While you're harvesting continue until you're full.
-            if (this.creep.memory.working == null || this.creep.memory.working == true) {
-
-                const result = this.creep.withdraw(storage, RESOURCE_ENERGY);
-
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(storage.pos);
-                    return;
-                } else if (result == ERR_NOT_ENOUGH_ENERGY) {
-                    return;
-                } else if (result == OK) {
-                    return;
-                }
-
+        // 4. Recursively make ingredients if not available
+        const missingIngredients = getMissingIngredients(room, targetCompound, 1000, new Set());
+        if (missingIngredients.length) {
+            // Focus on first missing (not enough in storage/terminal)
+            // Find highest-tier missing (so we progress up the tree)
+            let focusCompound = missingIngredients[missingIngredients.length - 1];
+            const reactants = getReactants(focusCompound);
+            if (reactants) {
+                // Set these as inputs in the two input labs
+                this.fillInputLabs(inputLabs, reactants, focusCompound);
+                return;
             } else {
-
-                let result = this.creep.transfer(this.creep.room.terminal, RESOURCE_ENERGY);
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(this.creep.room.terminal.pos);
-                    return;
-                } else if (result == OK) {
-                    return;
-                }
-
+                // It's a raw mineral, can't make, skip (or mine/buy)
+                return;
             }
         }
 
-        var links = this.creep.room.find<FieldStructure>(FIND_STRUCTURES, {
-            filter: (structure) => {
-                return structure.pos.x === this.room.memory.config.storagelink.x &&
-                    this.room.memory.config.storagelink.y === structure.pos.y &&
-                    structure.structureType == STRUCTURE_LINK;
-            }
-        });
+        // 5. If all ingredients available, fill input labs with reactants for targetCompound
+        const reactants = getReactants(targetCompound);
+        if (!reactants) return; // Defensive
+        this.fillInputLabs(inputLabs, reactants, targetCompound);
+    }
 
-        if (links.length > 0) {
+    // --- Helper to fill input labs with reactants ---
+    fillInputLabs(inputLabs: [StructureLab, StructureLab], reactants: [string, string], targetCompound: string) {
+        const creep = this.creep;
+        const room = this.room;
+        if (!creep || !room.storage) return;
 
-            //if (this.creep.room.name == 'W15N3') { console.log ( 'Link Work'); }
-            this.creep.travelTo(new RoomPosition(this.room.memory.config.chemist.parking.x, this.room.memory.config.chemist.parking.y, this.room.name));
-
-            let source;
-            let destination;
-
-            if (this.creep.room.memory.data.storagelinkcommand == "inbound") {
-                source = links[0];
-                destination = storage;
-                this.creep.say('in');
-                //console.log('[' + this.creep.room.name + '] Load link to storage' );
-            } else {
-                source = storage;
-                destination = links[0];
-                this.creep.say('out');
-                //console.log('[' + this.creep.room.name + '] Load storage to link' );
-            }
-
-            if (this.creep.memory.working == null || this.creep.memory.working == true) {
-
-                const result = this.creep.withdraw(source, RESOURCE_ENERGY);
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(source.pos);
-                    //console.log('[' + this.creep.room.name + '] Attempt to withdraw not in range' );
-                    return;
-                } else if (result == ERR_NOT_ENOUGH_ENERGY) {
-                    //console.log('[' + this.creep.room.name + '] Not enough energy in source' );
-                    return;
-                } else if (result == OK) {
-                    //console.log('[' + this.creep.room.name + '] Successful withdraw' );
-                    return;
+        // Map input labs to their required reactant
+        const targets: [StructureLab, string][] = [[inputLabs[0], reactants[0]], [inputLabs[1], reactants[1]]];
+        for (const [lab, resource] of targets) {
+            // If the lab doesn't contain the correct resource or enough of it, and storage/terminal has enough, set up a fill job
+            if (lab.mineralType !== resource || (lab.mineralAmount || 0) < 1500) {
+                // Find where to withdraw from (storage or terminal)
+                let src: StructureStorage | StructureTerminal | null = null;
+                if (room.storage && room.storage.store.getUsedCapacity(resource as ResourceConstant) > 0) {
+                    src = room.storage;
+                } else if (room.terminal && room.terminal.store.getUsedCapacity(resource as ResourceConstant) > 0) {
+                    src = room.terminal;
                 }
-
-            } else {
-                // offload to storage
-                let result = this.creep.transfer(destination, RESOURCE_ENERGY);
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(destination.pos);
-                    //console.log('[' + this.creep.room.name + '] Attempt to deposit not in range' );
-                    return;
-                } else if (result == OK) {
-                    //console.log('[' + this.creep.room.name + '] Successful deposit' );
+                if (src) {
+                    // If not carrying the resource, withdraw it
+                    if (creep.store.getUsedCapacity(resource as ResourceConstant) === 0) {
+                        if (creep.store.getFreeCapacity() > 0) {
+                            if (creep.withdraw(src, resource as ResourceConstant) === ERR_NOT_IN_RANGE) {
+                                creep.travelTo(src.pos);
+                                return;
+                            }
+                        }
+                    } else {
+                        // Deliver to lab
+                        if (creep.transfer(lab, resource as ResourceConstant) === ERR_NOT_IN_RANGE) {
+                            creep.travelTo(lab.pos);
+                            return;
+                        }
+                    }
+                    // Only do one action per tick for efficiency
                     return;
                 }
             }
-
         }
-
-        this.creep.travelTo(new RoomPosition(this.room.memory.config.chemist.parking.x, this.room.memory.config.chemist.parking.y, this.room.name));
-        this.creep.say('💤');
-*/
+        // If both labs are filled, you could set a flag or memory for next step if desired
     }
 }

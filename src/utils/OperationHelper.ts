@@ -14,26 +14,27 @@ import { RemoteAttack } from "../operations/RemoteAttack";
 import { RemoteKeeper } from "../operations/RemoteKeeper";
 import { PowerFarming } from "../operations/PowerFarming";
 import { LabProcesses } from "../operations/LabProcesses";
+import { SquadSiegeOperation } from "../operations/SquadSiegeOperation";
 
 type Type_Operation_Classes = {
     [key: string]: any,
 }
 
 const OPERATION_CLASSES: Type_Operation_Classes = {
-    remoteattack: RemoteAttack,
+    //remoteattack: RemoteAttack,
+    //expansionmanagement: ExpansionManagement,   // 8
     //emergencyservices: EmergencyServices,       // 1
-    energymanagement: EnergyManagement,         // 2
-    roomdefense: RoomDefense,                   // 3
-    expansionmanagement: ExpansionManagement,   // 8
     market: Market,                             // 5
-    //powerfarming: PowerFarming,                 // 6
+    roomdefense: RoomDefense,                   // 3
+    energymanagement: EnergyManagement,         // 2
+    constructioncompany: ConstructionCompany,   // 4
     //remotefarming: RemoteFarming,               // 7
+    //powerfarming: PowerFarming,                 // 6
     //geominingcompany: GeoMiningCompany,         // 9
     //depositfarmer: DepositFarmer,             // 10
     //remotekeeper: RemoteKeeper,                 // 11
     //remoteconstruction: RemoteDeconstruction,
     //labprocesses: LabProcesses,
-    //constructioncompany: ConstructionCompany,   // 4
 };
 
 export var OperationHelper = {
@@ -41,6 +42,21 @@ export var OperationHelper = {
     getOperations: function(): Operation[] {
         // gather flag data, instantiate operations
         let operationList: Operation[] = [];
+
+        // Custom military attack
+        if (Game.shard.name == 'shard3') {
+            const waypoints = [
+                {x: 36, y: 39, room: 'W13N1'},
+                {x: 45, y: 10, room: 'W10N0'},
+                {x: 4, y: 25, room: 'W4N0'},
+                // more...
+            ];
+            //let siege = new SquadSiegeOperation("W4N1", "W13N1", waypoints);
+            //operationList.push(siege);
+
+            //let siege2 = new SquadSiegeOperation("W4N1", "W13N1", waypoints);
+            //operationList.push(siege2);
+        }
 
         // loop through operations defined by library
         for (let typeName in OPERATION_CLASSES) {
