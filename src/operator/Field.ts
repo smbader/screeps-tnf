@@ -112,18 +112,18 @@ export class Field extends Operator {
                         Game.map.visual.line(creep.pos, containerOrStorage[0].pos, { color: "#ff0000", lineStyle: "dashed" });
                     } else if (result === ERR_NOT_ENOUGH_ENERGY) {
                         const chemistPark = this.room.memory.config.chemist?.parking;
-                        if (chemistPark) {
+                        if (chemistPark && !(creep.pos.x == chemistPark.x && creep.pos.y == chemistPark.y)) {
                             creep.travelTo(new RoomPosition(chemistPark.x, chemistPark.y, this.room.name));
                         }
                     }
                 } else {
-                    if (creep.pos.x != parkPos.x && creep.pos.y != parkPos.y) {
+                    if (!(creep.pos.x == parkPos.x && creep.pos.y == parkPos.y)) {
                         creep.travelTo(parkPos);
                     }
                 }
             } else if (!foundTarget) {
                 // If no work to do, park
-                if (creep.pos.x != parkPos.x && creep.pos.y != parkPos.y) {
+                if (!(creep.pos.x == parkPos.x && creep.pos.y == parkPos.y)) {
                     creep.travelTo(parkPos);
                 }
             }
@@ -164,15 +164,15 @@ export class Field extends Operator {
                 const result = creep.transfer(target, RESOURCE_ENERGY);
                 if (result === ERR_NOT_IN_RANGE) {
                     creep.travelTo(target.pos);
+                } else if (result == OK) {
+                } else {
+                    console.log(`FieldCreep ${creep.name} failed to transfer energy to target: ${result}`);
                 }
                 return;
             }
 
-            if (!foundTarget) {
-
-                if (creep.pos.x != parkPos.x && creep.pos.y != parkPos.y) {
-                    creep.travelTo(parkPos);
-                }
+            if (!(creep.pos.x == parkPos.x && creep.pos.y == parkPos.y)) {
+                creep.travelTo(parkPos);
             }
         }
     }

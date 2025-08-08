@@ -370,7 +370,7 @@ export class EnergyManagement extends Operation {
             operationOperator.actions();
             let cpuUsed = Game.cpu.getUsed() - cpuStart;
             if (cpuUsed > 0.20) {
-                console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
+                //console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
             }
         }
     }

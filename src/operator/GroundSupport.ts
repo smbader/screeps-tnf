@@ -1,78 +1,43 @@
-import {filter} from "lodash";
-import {Operator} from "../classes/operator";
-import {MapHelper} from "../utils/MapHelper";
+import { Operator } from "../classes/operator";
+import { MapHelper } from "../utils/MapHelper";
 
-// Screeps constants are available
 declare const REACTIONS: { [reagent1: string]: { [reagent2: string]: string } };
-declare const LAB_REACTIONS: { [compound: string]: [string, string] };
-declare const TIER3_COMPOUNDS: string[]; // e.g. ["XGH2O", "XLHO2", ...] You can define this array if not present.
 
-type FieldStructure = StructureSpawn|StructureExtension|StructureStorage|StructureContainer|StructureLink|StructureTerminal|StructureTower|StructureLab|StructureNuker|StructureFactory|StructurePowerSpawn;
-type StoreStructure = StructureTower|StructureSpawn|StructureExtension|StructureLink;
-type GSResourceTypes = "energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence";
-
-interface GroundSupportMemory extends CreepMemory {
-    targetContainer: Id<FieldStructure> | null;
-    sourceContainer: Id<FieldStructure> | null;
-    linkSendTo: Id<StructureLink> | null;
-    resourceType: GSResourceTypes | null;
-    phase: string | null;
-}
-
-export class GroundSupportCreep extends Creep {
-    memory!: GroundSupportMemory;
-
-    constructor(creepid: any) {
-        super(creepid);
-    }
-}
-
-// Helper: All tier 3 compounds, for reference
-const TIER3_LIST: string[] = [
+const SIEGE_BOOSTS: ResourceConstant[] = ["GHO2", "XZHO2", "XLHO2", "XKHO2", "XUH2O"];
+const TIER3_LIST: ResourceConstant[] = [
     "XGH2O", "XGHO2", "XKH2O", "XKHO2", "XLH2O", "XLHO2",
     "XZH2O", "XZHO2", "XUH2O", "XUHO2"
 ];
 
-// Helper: Recursively get the missing ingredients for a target compound
-function getMissingIngredients(room: Room, compound: string, amount: number, visited: Set<string> = new Set()): string[] {
-    // Prevent infinite loops
-    if (visited.has(compound)) return [];
-    visited.add(compound);
-
-    // If in storage or terminal, and we have enough, done
-    const storage = room.storage;
-    const terminal = room.terminal;
-    let available = 0;
-    if (storage) available += storage.store.getUsedCapacity(compound as ResourceConstant) || 0;
-    if (terminal) available += terminal.store.getUsedCapacity(compound as ResourceConstant) || 0;
-    if (available >= amount) return [];
-
-    // If raw mineral, cannot make, must mine or buy
-    if (!getReactants(compound)) return [compound];
-
-    // Otherwise, return the missing ingredients recursively
-    const [a, b] = getReactants(compound)!;
-    let missing: string[] = [];
-    missing = missing.concat(getMissingIngredients(room, a, amount, visited));
-    missing = missing.concat(getMissingIngredients(room, b, amount, visited));
-    return missing;
+interface TransferTask {
+    source?: Id<FieldStructure>;
+    target: Id<FieldStructure>;
+    resourceType: ResourceConstant;
+    linkSendTo?: Id<StructureLink>;
+    linkCommand?: string;
+    priority: number; // Added for task prioritization
+    taskType: string; // Added for debugging
 }
 
-// Helper: Find reactants for a given product (traverse REACTIONS)
-function getReactants(product: string): [string, string] | null {
-    for (const a in REACTIONS) {
-        for (const b in REACTIONS[a]) {
-            if (REACTIONS[a][b] === product) return [a, b];
-        }
+export class GroundSupportCreep extends Creep {
+    memory!: CreepMemory & {
+        working?: boolean;
+        phase?: string | null;
+        targetContainer?: Id<FieldStructure> | null;
+        sourceContainer?: Id<FieldStructure> | null;
+        resourceType?: ResourceConstant | null;
+        linkSendTo?: Id<StructureLink> | null;
+    };
+
+    constructor(creepid: Id<Creep>) {
+        super(creepid);
     }
-    return null;
 }
 
-// An operator is a screep who performs an operation.
 export class GroundSupport extends Operator {
     memory: {
-        sourceid?: any;
-        batteryid?: any;
+        sourceid?: Id<FieldStructure>;
+        batteryid?: Id<StructureContainer>;
         roomname?: string;
         name?: string;
     };
@@ -81,518 +46,624 @@ export class GroundSupport extends Operator {
 
     constructor(name: string, room: Room) {
         super(name, room);
-
-        this.memory = {};
-        this.memory.name = name;
-        this.memory.roomname = room.name;
-
-        if (Game.creeps[this.name]) {
-            this.creep = new GroundSupportCreep(Game.creeps[this.name].id);
-        } else {
-            this.creep = null;
-        }
+        this.memory = { name, roomname: room.name };
+        this.creep = Game.creeps[name] ? new GroundSupportCreep(Game.creeps[name].id) : null;
         this.room = room;
     }
 
-    actions() {
-        // Creep may not exist yet.
-        if (!this.creep) {
-            return;
+    private initializeMemory(): void {
+        if (!this.creep?.room.memory.data && this.creep) {
+            this.creep.room.memory.data = {
+                storagelinkcommand: "",
+                storagelinktarget: null,
+                terminal: { energy: 0 },
+                labs: { reagents: [], products: [], boosts: [] }
+            };
         }
-
-        if (!this.creep.room.storage) {
-            return;
-        }
-
-        if (!this.creep.room.memory.data.storagelinktarget) {
-            this.creep.room.memory.data.storagelinktarget = null;
-        }
-
-        if (this.creep.store.getUsedCapacity() == this.creep.store.getCapacity()) {
-            this.creep.memory.working = false;
-        }
-        if (this.creep.store.getUsedCapacity() == 0 && this.creep.memory.working == false) {
-            this.creep.memory.working = true;
-        }
-
-
-
-        if (this.creep.memory.phase == 'inprogress' && this.creep.memory.targetContainer != null) {
-
-            let structure = Game.getObjectById(this.creep.memory.targetContainer);
-            if (!structure) {
-                this.creep.memory.phase = 'inprogress';
-                this.creep.memory.targetContainer = null;
-                return;
-            }
-
-            let xferResourceType = <GSResourceTypes>RESOURCE_ENERGY;
-            if (this.creep.memory.resourceType) {
-                xferResourceType = this.creep.memory.resourceType;
-            }
-
-            if (this.creep.memory.working == null || this.creep.memory.working == true) {
-
-                let sourceContainer = <FieldStructure>this.creep.room.storage;
-                if (this.creep.memory.sourceContainer) {
-                    let temp = Game.getObjectById(this.creep.memory.sourceContainer)
-                    if (temp) {
-                        sourceContainer = temp;
-                    }
-                }
-
-                const result = this.creep.withdraw(sourceContainer, xferResourceType);
-
-                if (result == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(sourceContainer.pos);
-                    return;
-                } else if (result == ERR_NOT_ENOUGH_RESOURCES) {
-                    this.creep.memory.working = false;
-                    return;
-                } else if (result == OK) {
-                    return;
-                }
-
-            } else {
-
-                let result = this.creep.transfer(structure, xferResourceType);
-
-                //console.log('[' + this.creep.room.name + '] Transfer Result: ' + result);
-
-                if (result == ERR_NOT_IN_RANGE) {
-
-                    this.creep.travelTo(structure.pos);
-                    return;
-                } else if (result == OK) {
-
-                }
-
-                if (structure.store.getFreeCapacity(xferResourceType) == 0 ||
-                    structure.id == this.creep.room.storage.id ||
-                    (this.creep.room.terminal && structure.id == this.creep.room.terminal.id)
-                ) {
-
-                    if (this.creep.memory.linkSendTo) {
-
-                        // Keep requesting the send until the target is empty.
-                        let targetLink = Game.getObjectById(this.creep.memory.linkSendTo);
-                        if (targetLink == null ||
-                            (targetLink && targetLink.store.getUsedCapacity(RESOURCE_ENERGY) > 600)) {
-
-                            this.creep.room.memory.data.storagelinkcommand = '';
-                            this.creep.memory.phase = '';
-                            this.creep.memory.linkSendTo = null;
-                            this.creep.memory.targetContainer = null;
-                            this.creep.memory.sourceContainer = null;
-                        } else {
-                            // Energy not sent yet.
-                            this.creep.say('⚡');
-                            this.creep.room.memory.data.storagelinkcommand = 'outbound';
-                            this.creep.room.memory.data.storagelinktarget = this.creep.memory.linkSendTo;
-                        }
-                        return;
-                    } else {
-
-                        this.creep.room.memory.data.storagelinkcommand = 'inbound';
-                        this.creep.room.memory.data.storagelinktarget = null;
-                        this.creep.memory.phase = '';
-                        this.creep.memory.linkSendTo = null;
-                        this.creep.memory.targetContainer = null;
-                        this.creep.memory.sourceContainer = null;
-                        this.creep.memory.resourceType = null;
-                        // The Job is done.
-                    }
-
-                }
-
-                return;
-
-            }
-
-
-
-        } else {
-
-            // we need to look for a new item to fill.
-
-            // look for tombstones
-            let tombstone = this.creep.pos.findClosestByPath(FIND_TOMBSTONES);
-            if (tombstone && this.creep.pos.getRangeTo(tombstone) < 10 && tombstone.store.getUsedCapacity() > 0 && this.creep.store.getFreeCapacity() > 0) {
-                for(const resourceType in tombstone.store) {
-                    let result = this.creep.withdraw(tombstone, <GSResourceTypes>resourceType);
-                    if (result == ERR_NOT_IN_RANGE) {
-                        this.creep.travelTo(tombstone.pos);
-                    }
-                }
-                return;
-            }
-            if (this.creep.store.getUsedCapacity() > 0) {
-                for(const resourceType in this.creep.store) {
-                    let result = this.creep.transfer(this.creep.room.storage, <GSResourceTypes>resourceType)
-                    if (result == ERR_NOT_IN_RANGE) {
-                        this.creep.travelTo(this.creep.room.storage.pos);
-                        this.creep.say('180');
-                    } else if (result == OK) {
-                        this.creep.say('192');
-                        return;
-                    }
-                }
-                return;
-            }
-
-            // First I need to know what I am responsible for.
-            // Unloading link
-            // Outbound sends to field and controller links
-            // Loading towers
-            // Balancing storage / terminal energy
-
-            var storagelinks = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
-                filter: (structure) => {
-                    return structure.pos.x === this.room.memory.config.storagelink.x &&
-                        this.room.memory.config.storagelink.y === structure.pos.y &&
-                        structure.structureType == STRUCTURE_LINK;
-                }
-            });
-            let storagelink;
-            if (storagelinks.length > 0) {
-                storagelink = storagelinks[0];
-            } else {
-                storagelink = null;
-            }
-
-            // Check if field links need energy.
-            if (this.creep.room.memory.config.fieldLinks) {
-
-                let fieldLinks = this.creep.room.memory.config.fieldLinks;
-
-                //for (let i = this.memory.containeridx; i < containers.length; i++) {
-                for (let i = 0; i < fieldLinks.length; i++) {
-
-                    var target = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
-                        filter: (structure) => {
-                            return structure.pos.x === fieldLinks[i].x &&
-                                   structure.pos.y === fieldLinks[i].y &&
-                                   structure.structureType == STRUCTURE_LINK &&
-                                   structure.store.getFreeCapacity(RESOURCE_ENERGY) > 600;
-                        }
-                    });
-
-                    if (target.length > 0 && storagelink) {
-                        this.creep.memory.targetContainer = storagelink.id; //
-                        this.creep.memory.linkSendTo = target[0].id;
-                        this.creep.memory.phase = 'inprogress';
-                        //console.log('[' + this.creep.room.name + '] Add to field link.');
-                        return;
-                    }
-                }
-            }
-
-            // Check if controller links need energy.
-            if (this.creep.room.memory.config.controllerLink) {
-
-                let controllerLinkpos = this.creep.room.memory.config.controllerLink;
-
-                var target = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.pos.x === controllerLinkpos.x
-                            && structure.pos.y === controllerLinkpos.y
-                            && structure.structureType == STRUCTURE_LINK
-                            && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 600;
-                    }
-                });
-
-                if (target.length > 0 && storagelink) {
-                    this.creep.memory.targetContainer = storagelink.id; //
-                    this.creep.memory.linkSendTo = target[0].id;
-                    this.creep.memory.phase = 'inprogress';
-                    //console.log('[' + this.creep.room.name + '] Add to controller.');
-                    return;
-                }
-
-            }
-
-            // CLEAR STORAGE LINK FOR INBOUND
-            if (storagelink && storagelink.store.getUsedCapacity(RESOURCE_ENERGY) > 0 &&
-                this.creep.room.storage.store.getUsedCapacity() < (this.creep.room.storage.store.getCapacity() - 1000)) {
-
-                //console.log('[' + this.creep.room.name + '] Unload storage link.');
-                this.creep.memory.sourceContainer = storagelink.id;
-                this.creep.memory.targetContainer = this.creep.room.storage.id;
-                this.creep.memory.phase = 'inprogress';
-                //console.log('[' + this.creep.room.name + '] Clearing Link.');
-                return;
-            }
-
-
-            // IF TOWERS NEED ENERGY
-            var targets = this.creep.room.find<StructureTower>(FIND_STRUCTURES, {
-                filter: (structure) => {
-                    return structure.structureType == STRUCTURE_TOWER &&
-                        structure.store.getFreeCapacity(RESOURCE_ENERGY) > 200;
-                }
-            });
-
-            let storageEnergy = this.creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY)
-
-            if (targets.length > 0 && storageEnergy > 33000) {
-
-                this.creep.memory.targetContainer = targets[0].id;
-                this.creep.memory.linkSendTo = null;
-                this.creep.memory.phase = 'inprogress';
-                //console.log('[' + this.creep.room.name + '] Add to tower.');
-                return;
-            }
-
-            if (!this.creep.room.terminal) {
-                this.creep.travelTo(new RoomPosition(this.room.memory.config.chemist.parking.x, this.room.memory.config.chemist.parking.y, this.room.name));
-                this.creep.say('💤');
-                return;
-            }
-
-            let terminalEnergy = this.creep.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY)
-
-            if (terminalEnergy > storageEnergy && storageEnergy < 300000) {
-                //console.log('[' + this.creep.room.name + '] Add to storage.');
-                this.creep.memory.sourceContainer = this.creep.room.terminal.id;
-                this.creep.memory.targetContainer = this.creep.room.storage.id;
-                this.creep.memory.phase = 'inprogress';
-                return;
-            }
-
-            if ((terminalEnergy < 35000 && storageEnergy > 100000) || (storageEnergy > 900000 && terminalEnergy < 125000)) {
-                //console.log('[' + this.creep.room.name + '] Add to terminal.');
-                this.creep.memory.sourceContainer = this.creep.room.storage.id;
-                this.creep.memory.targetContainer = this.creep.room.terminal.id;
-                this.creep.memory.phase = 'inprogress';
-                return;
-            }
-
-            // If there is RESOURCE in storage that the terminal needs more of, move it over.
-            for(const resourceType in this.creep.room.storage.store) {
-
-                if (this.creep.room.terminal.store.getUsedCapacity(<GSResourceTypes>resourceType) < 15000) {
-                    this.creep.memory.sourceContainer = this.creep.room.storage.id;
-                    this.creep.memory.targetContainer = this.creep.room.terminal.id;
-                    this.creep.memory.resourceType = <GSResourceTypes>resourceType;
-                    this.creep.memory.phase = 'inprogress';
-                    return;
-                }
-            }
-
-            if (storageEnergy > 125000) {
-                let labs = this.creep.room.find<StructureLab>(FIND_MY_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.structureType == STRUCTURE_LAB
-                            && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 200;
-                    }
-                });
-                if (labs && labs.length > 0) {
-                    this.creep.memory.sourceContainer = this.creep.room.storage.id;
-                    this.creep.memory.targetContainer = labs[0].id;
-                    this.creep.memory.phase = 'inprogress';
-                    return;
-                }
-            }
-
-            if (storageEnergy > 200000) {
-                let nukers = this.creep.room.find<StructureNuker>(FIND_MY_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.structureType == STRUCTURE_NUKER
-                            && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0;
-                    }
-                });
-                if (nukers && nukers.length > 0) {
-                    this.creep.memory.sourceContainer = this.creep.room.storage.id;
-                    this.creep.memory.targetContainer = nukers[0].id;
-                    this.creep.memory.phase = 'inprogress';
-                    return;
-                }
-            }
-            if (this.creep.room.terminal.store.getUsedCapacity(RESOURCE_GHODIUM) > 0) {
-                let nukers = this.creep.room.find<StructureNuker>(FIND_MY_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.structureType == STRUCTURE_NUKER
-                            && structure.store.getFreeCapacity(RESOURCE_GHODIUM) > 0;
-                    }
-                });
-                if (nukers && nukers.length > 0) {
-                    this.creep.memory.sourceContainer = this.creep.room.terminal.id;
-                    this.creep.memory.targetContainer = nukers[0].id;
-                    this.creep.memory.resourceType = RESOURCE_GHODIUM;
-                    this.creep.memory.phase = 'inprogress';
-                    return;
-                }
-            }
-
-            if (storageEnergy > 200000) {
-                let powerspawns = this.creep.room.find<StructurePowerSpawn>(FIND_MY_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.structureType == STRUCTURE_POWER_SPAWN
-                            && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 800;
-                    }
-                });
-                if (powerspawns && powerspawns.length > 0) {
-                    this.creep.memory.sourceContainer = this.creep.room.storage.id;
-                    this.creep.memory.targetContainer = powerspawns[0].id;
-                    this.creep.memory.phase = 'inprogress';
-                    return;
-                }
-
-                if (this.creep.room.terminal.store.getUsedCapacity(RESOURCE_POWER) > 0) {
-                    powerspawns = this.creep.room.find<StructurePowerSpawn>(FIND_MY_STRUCTURES, {
-                        filter: (structure) => {
-                            return structure.structureType == STRUCTURE_POWER_SPAWN
-                                && structure.store.getFreeCapacity(RESOURCE_POWER) > 50;
-                        }
-                    });
-
-                    if (powerspawns && powerspawns.length > 0) {
-                        this.creep.memory.sourceContainer = this.creep.room.terminal.id;
-                        this.creep.memory.targetContainer = powerspawns[0].id;
-                        this.creep.memory.resourceType = RESOURCE_POWER;
-                        this.creep.memory.phase = 'inprogress';
-                        return;
-                    }
-                }
-
-            }
-
-            if (storageEnergy > 200000) {
-                let factorys = this.creep.room.find<StructureFactory>(FIND_MY_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.structureType == STRUCTURE_FACTORY
-                            && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0;
-                    }
-                });
-                if (factorys && factorys.length > 0) {
-                    this.creep.memory.sourceContainer = this.creep.room.storage.id;
-                    this.creep.memory.targetContainer = factorys[0].id;
-                    this.creep.memory.phase = 'inprogress';
-                    return;
-                }
-            }
-
-            // ---- LAB REACTION PRIORITY (lowest priority: placed just before sleep/parking) ----
-            this.handleLabReactions();
-
-            // Nothing to do?  Renew myself.
-
-            this.creep.travelTo(new RoomPosition(this.room.memory.config.chemist.parking.x, this.room.memory.config.chemist.parking.y, this.room.name));
-            this.creep.say('💤');
-
-        }
-
     }
 
-    // --- New helper function for lab reactions ---
-    handleLabReactions() {
-        const creep = this.creep;
-        const room = this.room;
-        if (!creep || !room.terminal || !room.storage) return;
+    private withdrawResource(source: FieldStructure, resourceType: ResourceConstant): boolean {
+        const creep = this.creep!;
+        const result = creep.withdraw(source, resourceType);
+        if (result === ERR_NOT_IN_RANGE) {
+            creep.travelTo(source.pos, { reusePath: 5 });
+            creep.say(`📥 ${resourceType}`);
+            return false;
+        } else if (result === OK) {
+            creep.say(`✅ ${resourceType}`);
+            return true;
+        } else if (result === ERR_NOT_ENOUGH_RESOURCES && source.structureType === STRUCTURE_LINK) {
+            console.log(`[GroundSupport] Link ${source.id} empty for ${resourceType}, clearing task`);
+            creep.memory.phase = null;
+            creep.memory.targetContainer = null;
+            creep.memory.sourceContainer = null;
+            creep.memory.resourceType = null;
+            creep.memory.linkSendTo = null;
+            creep.say(`🛑 Link empty`);
+            return false;
+        } else {
+            console.log(`[GroundSupport] Withdraw failed from ${source.id} (${source.structureType}) for ${resourceType}: ${result}`);
+            return false;
+        }
+    }
 
-        // 1. Identify all labs
-        const allLabs: StructureLab[] = room.find(FIND_MY_STRUCTURES, { filter: s => s.structureType === STRUCTURE_LAB }) as StructureLab[];
-        if (allLabs.length < 3) return; // Need at least 3 labs for reactions
+    private transferResource(target: FieldStructure, resourceType: ResourceConstant): boolean {
+        const creep = this.creep!;
+        const result = creep.transfer(target, resourceType);
+        if (result === ERR_NOT_IN_RANGE) {
+            creep.travelTo(target.pos, { reusePath: 5 });
+            creep.say(`📤 ${resourceType}`);
+            return false;
+        } else if (result === OK) {
+            creep.say(`✅ ${resourceType}`);
+            return true;
+        } else if (result === ERR_FULL && target.store.getFreeCapacity(resourceType) === 0) {
+            if (target.structureType !== STRUCTURE_STORAGE && target.structureType !== STRUCTURE_TERMINAL) {
+                creep.memory.phase = null;
+                creep.memory.targetContainer = null;
+                creep.memory.sourceContainer = null;
+                creep.memory.resourceType = null;
+                creep.memory.linkSendTo = null;
+                creep.say(`🛑 ${target.structureType} full`);
+            }
+            return false;
+        } else {
+            console.log(`[GroundSupport] Transfer failed to ${target.id} (${target.structureType}) for ${resourceType}: ${result}`);
+            return false;
+        }
+    }
 
-        // 2. Find the two input labs (within range 2 of all others)
-        let inputLabs: [StructureLab, StructureLab] | null = null;
-        for (let i = 0; i < allLabs.length; i++) {
-            for (let j = i + 1; j < allLabs.length; j++) {
-                const labA = allLabs[i];
-                const labB = allLabs[j];
-                let allInRange = true;
-                for (const lab of allLabs) {
-                    if (lab.id === labA.id || lab.id === labB.id) continue;
-                    if (labA.pos.getRangeTo(lab) > 2 && labB.pos.getRangeTo(lab) > 2) {
-                        allInRange = false;
-                        break;
-                    }
+    private parkCreep(): void {
+        const creep = this.creep!;
+        creep.travelTo(
+            new RoomPosition(this.room.memory.config.chemist.parking.x, this.room.memory.config.chemist.parking.y, this.room.name),
+            { reusePath: 5 }
+        );
+        creep.say("💤");
+    }
+
+    private getReactants(product: ResourceConstant): [ResourceConstant, ResourceConstant] | null {
+        for (const a in REACTIONS) {
+            for (const b in REACTIONS[a]) {
+                if (REACTIONS[a][b] === product) return [a as ResourceConstant, b as ResourceConstant];
+            }
+        }
+        return null;
+    }
+
+    private getStorageOrTerminal(resourceType: ResourceConstant, minAmount: number = 30): StructureStorage | StructureTerminal | null {
+        const { storage, terminal } = this.room;
+        console.log(`[GroundSupport] Checking source for ${resourceType}: storage=${storage?.store[resourceType] || 0}, terminal=${terminal?.store[resourceType] || 0}, minAmount=${minAmount}`);
+        if (storage && storage.store.getUsedCapacity(resourceType) >= minAmount) return storage;
+        if (terminal && terminal.store.getUsedCapacity(resourceType) >= minAmount) return terminal;
+        return null;
+    }
+
+    private handleLabs(): TransferTask | null {
+        const { storage, terminal } = this.room;
+        if (!storage || !terminal) return null;
+
+        // Unload products from output labs
+        for (const product of this.room.memory.data.labs.products) {
+            const lab = Game.getObjectById(product.id) as StructureLab | null;
+            if (!lab || !lab.mineralType || lab.mineralAmount <= 100) continue;
+            if (this.creep!.store.getUsedCapacity() === 0) {
+                console.log(`[GroundSupport] Lab unload task: target=${lab.id}, resource=${lab.mineralType}`);
+                return { target: lab.id, resourceType: lab.mineralType, priority: 2, taskType: "lab_unload" };
+            } else if (this.creep!.store.getUsedCapacity(lab.mineralType) > 0) {
+                console.log(`[GroundSupport] Lab deposit task: target=${storage.id}, resource=${lab.mineralType}`);
+                return { target: storage.id, resourceType: lab.mineralType, priority: 2, taskType: "lab_deposit" };
+            }
+        }
+
+        // Handle boost requests
+        for (const boost of this.room.memory.data.labs.boosts) {
+            const lab = Game.getObjectById(boost.id) as StructureLab | null;
+            if (!lab) {
+                console.log(`[GroundSupport] Invalid lab ID ${boost.id} in boost request`);
+                continue;
+            }
+            if (lab.mineralType === boost.component && (lab.mineralAmount || 0) >= 1500) continue;
+            const src = this.getStorageOrTerminal(boost.component);
+            if (src) {
+                if (this.creep!.store.getUsedCapacity(boost.component) === 0) {
+                    console.log(`[GroundSupport] Lab boost task: source=${src.id}, target=${lab.id}, resource=${boost.component}`);
+                    return { source: src.id, target: lab.id, resourceType: boost.component, priority: 1, taskType: "lab_boost_withdraw" };
+                } else {
+                    console.log(`[GroundSupport] Lab boost transfer: target=${lab.id}, resource=${boost.component}`);
+                    return { target: lab.id, resourceType: boost.component, priority: 1, taskType: "lab_boost_transfer" };
                 }
-                if (allInRange) {
-                    inputLabs = [labA, labB];
+            } else {
+                console.log(`[GroundSupport] No source has ${boost.component} for lab ${boost.id}`);
+            }
+        }
+
+        // Handle reactions
+        if (this.room.memory.data.labs.reagents.length === 2) {
+            const compoundsToMake = [...SIEGE_BOOSTS, ...TIER3_LIST.filter(c => !SIEGE_BOOSTS.includes(c))];
+            let targetCompound: ResourceConstant | null = null;
+            for (const compound of compoundsToMake) {
+                let total = 0;
+                if (storage) total += storage.store.getUsedCapacity(compound) || 0;
+                if (terminal) total += terminal.store.getUsedCapacity(compound) || 0;
+                if (total < 1000) {
+                    targetCompound = compound;
                     break;
                 }
             }
-            if (inputLabs) break;
-        }
-        if (!inputLabs) return;
+            if (!targetCompound) return null;
 
-        // 3. Decide which Tier3 to make (pick next unfinished in TIER3_LIST)
-        let targetCompound: string | null = null;
-        for (const t3 of TIER3_LIST) {
-            // If there isn't at least 1000 in storage+terminal, we want to make more
-            let total = 0;
-            if (room.storage) total += room.storage.store.getUsedCapacity(t3 as ResourceConstant) || 0;
-            if (room.terminal) total += room.terminal.store.getUsedCapacity(t3 as ResourceConstant) || 0;
-            if (total < 1000) {
-                targetCompound = t3;
-                break;
+            const outputLabs = this.room.memory.data.labs.products
+                .map(p => Game.getObjectById(p.id))
+                .filter((l): l is StructureLab => !!l);
+            // @ts-ignore
+            const canReact = outputLabs.every(lab => !lab.cooldown && lab.store.getFreeCapacity() >= 5);
+            if (!canReact) return null;
+
+            const reactants = this.getReactants(targetCompound);
+            if (!reactants) return null;
+
+            for (let i = 0; i < 2; i++) {
+                const reagent = this.room.memory.data.labs.reagents[i];
+                const lab = Game.getObjectById(reagent.id) as StructureLab | null;
+                if (!lab) {
+                    console.log(`[GroundSupport] Invalid lab ID ${reagent.id} in reagent request`);
+                    continue;
+                }
+                if (lab.mineralType === reactants[i] && (lab.mineralAmount || 0) >= 1500) continue;
+                const src = this.getStorageOrTerminal(reactants[i]);
+                if (src) {
+                    if (this.creep!.store.getUsedCapacity(reactants[i]) === 0) {
+                        console.log(`[GroundSupport] Lab reaction task: source=${src.id}, target=${lab.id}, resource=${reactants[i]}`);
+                        return { source: src.id, target: lab.id, resourceType: reactants[i], priority: 3, taskType: "lab_reaction_withdraw" };
+                    } else {
+                        console.log(`[GroundSupport] Lab reaction transfer: target=${lab.id}, resource=${reactants[i]}`);
+                        return { target: lab.id, resourceType: reactants[i], priority: 3, taskType: "lab_reaction_transfer" };
+                    }
+                } else {
+                    console.log(`[GroundSupport] No source has ${reactants[i]} for lab ${reagent.id}`);
+                }
             }
         }
-        if (!targetCompound) return; // All done
-
-        // 4. Recursively make ingredients if not available
-        const missingIngredients = getMissingIngredients(room, targetCompound, 1000, new Set());
-        if (missingIngredients.length) {
-            // Focus on first missing (not enough in storage/terminal)
-            // Find highest-tier missing (so we progress up the tree)
-            let focusCompound = missingIngredients[missingIngredients.length - 1];
-            const reactants = getReactants(focusCompound);
-            if (reactants) {
-                // Set these as inputs in the two input labs
-                this.fillInputLabs(inputLabs, reactants, focusCompound);
-                return;
-            } else {
-                // It's a raw mineral, can't make, skip (or mine/buy)
-                return;
-            }
-        }
-
-        // 5. If all ingredients available, fill input labs with reactants for targetCompound
-        const reactants = getReactants(targetCompound);
-        if (!reactants) return; // Defensive
-        this.fillInputLabs(inputLabs, reactants, targetCompound);
+        return null;
     }
 
-    // --- Helper to fill input labs with reactants ---
-    fillInputLabs(inputLabs: [StructureLab, StructureLab], reactants: [string, string], targetCompound: string) {
-        const creep = this.creep;
-        const room = this.room;
-        if (!creep || !room.storage) return;
+    private getTasks(): TransferTask[] {
+        const tasks: TransferTask[] = [];
+        const { creep, room } = this;
+        if (!creep || !room.storage) return tasks;
 
-        // Map input labs to their required reactant
-        const targets: [StructureLab, string][] = [[inputLabs[0], reactants[0]], [inputLabs[1], reactants[1]]];
-        for (const [lab, resource] of targets) {
-            // If the lab doesn't contain the correct resource or enough of it, and storage/terminal has enough, set up a fill job
-            if (lab.mineralType !== resource || (lab.mineralAmount || 0) < 1500) {
-                // Find where to withdraw from (storage or terminal)
-                let src: StructureStorage | StructureTerminal | null = null;
-                if (room.storage && room.storage.store.getUsedCapacity(resource as ResourceConstant) > 0) {
-                    src = room.storage;
-                } else if (room.terminal && room.terminal.store.getUsedCapacity(resource as ResourceConstant) > 0) {
-                    src = room.terminal;
-                }
-                if (src) {
-                    // If not carrying the resource, withdraw it
-                    if (creep.store.getUsedCapacity(resource as ResourceConstant) === 0) {
-                        if (creep.store.getFreeCapacity() > 0) {
-                            if (creep.withdraw(src, resource as ResourceConstant) === ERR_NOT_IN_RANGE) {
-                                creep.travelTo(src.pos);
-                                return;
-                            }
-                        }
-                    } else {
-                        // Deliver to lab
-                        if (creep.transfer(lab, resource as ResourceConstant) === ERR_NOT_IN_RANGE) {
-                            creep.travelTo(lab.pos);
-                            return;
-                        }
-                    }
-                    // Only do one action per tick for efficiency
-                    return;
+        const storageEnergy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY) || 0;
+        const terminal = room.terminal;
+        const terminalEnergy = terminal ? terminal.store.getUsedCapacity(RESOURCE_ENERGY) || 0 : 0;
+
+        // Task 1: Deposit to storage (high priority if carrying resources)
+        if (creep.store.getUsedCapacity() > 0) {
+            for (const resourceType in creep.store) {
+                if (creep.store[resourceType as ResourceConstant]! > 0) {
+                    tasks.push({ target: room.storage.id, resourceType: resourceType as ResourceConstant, priority: 1, taskType: "deposit_to_storage" });
                 }
             }
         }
-        // If both labs are filled, you could set a flag or memory for next step if desired
+
+        // Task 2: Handle storage link
+        const storagelink = room.find<StructureLink>(FIND_STRUCTURES, {
+            filter: s =>
+                s.pos.x === room.memory.config.storagelink.x &&
+                s.pos.y === room.memory.config.storagelink.y &&
+                s.structureType === STRUCTURE_LINK
+        })[0];
+        if (
+            storagelink &&
+            storagelink.store.getUsedCapacity(RESOURCE_ENERGY) > 0 &&
+            room.storage.store.getFreeCapacity(RESOURCE_ENERGY) > 1000
+        ) {
+            tasks.push({ source: storagelink.id, target: room.storage.id, resourceType: RESOURCE_ENERGY, priority: 2, taskType: "storage_link_to_storage" });
+        }
+
+        // Task 3: Handle field/controller links
+        if (room.memory.config.fieldLinks) {
+            for (const link of room.memory.config.fieldLinks) {
+                const target = room.find<StructureLink>(FIND_STRUCTURES, {
+                    filter: s =>
+                        s.pos.x === link.x &&
+                        s.pos.y === link.y &&
+                        s.structureType === STRUCTURE_LINK &&
+                        s.store.getFreeCapacity(RESOURCE_ENERGY) > 600
+                })[0];
+                if (target && storagelink) {
+                    tasks.push({
+                        source: room.storage.id,
+                        target: storagelink.id,
+                        resourceType: RESOURCE_ENERGY,
+                        linkSendTo: target.id,
+                        linkCommand: "outbound",
+                        priority: 3,
+                        taskType: "field_link_transfer"
+                    });
+                }
+            }
+        }
+        if (room.memory.config.controllerLink) {
+            const target = room.find<StructureLink>(FIND_STRUCTURES, {
+                filter: s =>
+                    s.pos.x === room.memory.config.controllerLink.x &&
+                    s.pos.y === room.memory.config.controllerLink.y &&
+                    s.structureType === STRUCTURE_LINK &&
+                    s.store.getFreeCapacity(RESOURCE_ENERGY) > 600
+            })[0];
+            if (target && storagelink) {
+                tasks.push({
+                    source: room.storage.id,
+                    target: storagelink.id,
+                    resourceType: RESOURCE_ENERGY,
+                    linkSendTo: target.id,
+                    linkCommand: "outbound",
+                    priority: 3,
+                    taskType: "controller_link_transfer"
+                });
+            }
+        }
+
+        // Task 4: Fill all towers
+        if (storageEnergy > 10000) {
+            const towers = room.find<StructureTower>(FIND_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_TOWER && s.store.getFreeCapacity(RESOURCE_ENERGY) > 200
+            });
+            const criticalTowers = towers.filter(t => t.store.getUsedCapacity(RESOURCE_ENERGY) < 400);
+            if (criticalTowers.length > 0) {
+                criticalTowers.forEach(tower => {
+                    tasks.push({ source: room.storage?.id, target: tower.id, resourceType: RESOURCE_ENERGY, priority: 0, taskType: "fill_tower_critical" });
+                });
+            } else {
+                towers.forEach(tower => {
+                    tasks.push({ source: room.storage?.id, target: tower.id, resourceType: RESOURCE_ENERGY, priority: 4, taskType: "fill_tower" });
+                });
+            }
+        }
+
+        // Task 5: Balance terminal/storage energy
+        if (terminal) {
+            if (terminalEnergy > storageEnergy && storageEnergy < 300000) {
+                tasks.push({ source: terminal.id, target: room.storage.id, resourceType: RESOURCE_ENERGY, priority: 5, taskType: "balance_terminal_to_storage" });
+            } else if ((terminalEnergy < 35000 && storageEnergy > 100000) || (storageEnergy > 900000 && terminalEnergy < 125000)) {
+                tasks.push({ source: room.storage.id, target: terminal.id, resourceType: RESOURCE_ENERGY, priority: 5, taskType: "balance_storage_to_terminal" });
+            }
+        }
+
+        // Task 6: Move resources to terminal
+        if (terminal) {
+            for (const resourceType in room.storage.store) {
+                if (terminal.store.getUsedCapacity(resourceType as ResourceConstant) < 15000) {
+                    tasks.push({ source: room.storage.id, target: terminal.id, resourceType: resourceType as ResourceConstant, priority: 6, taskType: "move_to_terminal" });
+                }
+            }
+        }
+
+        // Task 7: Handle labs (boosts and reactions)
+        const labTask = this.handleLabs();
+        if (labTask) tasks.push(labTask);
+
+        // Task 8: Fill labs with energy
+        if (storageEnergy > 125000) {
+            const lab = room.find<StructureLab>(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_LAB && s.store.getFreeCapacity(RESOURCE_ENERGY) > 200
+            })[0];
+            if (lab) {
+                tasks.push({ source: room.storage.id, target: lab.id, resourceType: RESOURCE_ENERGY, priority: 7, taskType: "fill_lab_energy" });
+            }
+        }
+
+        // Task 9: Fill nukers
+        if (storageEnergy > 200000) {
+            const nuker = room.find<StructureNuker>(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_NUKER && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+            })[0];
+            if (nuker) {
+                tasks.push({ source: room.storage.id, target: nuker.id, resourceType: RESOURCE_ENERGY, priority: 8, taskType: "fill_nuker_energy" });
+            }
+        }
+        if (terminal && terminal.store.getUsedCapacity(RESOURCE_GHODIUM) > 0) {
+            const nuker = room.find<StructureNuker>(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_NUKER && s.store.getFreeCapacity(RESOURCE_GHODIUM) > 0
+            })[0];
+            if (nuker) {
+                tasks.push({ source: terminal.id, target: nuker.id, resourceType: RESOURCE_GHODIUM, priority: 8, taskType: "fill_nuker_ghodium" });
+            }
+        }
+
+        // Task 10: Fill power spawns
+        if (storageEnergy > 200000) {
+            const powerspawn = room.find<StructurePowerSpawn>(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_POWER_SPAWN && s.store.getFreeCapacity(RESOURCE_ENERGY) > 800
+            })[0];
+            if (powerspawn) {
+                tasks.push({ source: room.storage.id, target: powerspawn.id, resourceType: RESOURCE_ENERGY, priority: 9, taskType: "fill_powerspawn_energy" });
+            }
+        }
+        if (terminal && terminal.store.getUsedCapacity(RESOURCE_POWER) > 0) {
+            const powerspawn = room.find<StructurePowerSpawn>(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_POWER_SPAWN && s.store.getFreeCapacity(RESOURCE_POWER) > 50
+            })[0];
+            if (powerspawn) {
+                tasks.push({ source: terminal.id, target: powerspawn.id, resourceType: RESOURCE_POWER, priority: 9, taskType: "fill_powerspawn_power" });
+            }
+        }
+
+        // Task 11: Fill factories
+        if (storageEnergy > 200000) {
+            const factory = room.find<StructureFactory>(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_FACTORY && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+            })[0];
+            if (factory) {
+                tasks.push({ source: room.storage.id, target: factory.id, resourceType: RESOURCE_ENERGY, priority: 10, taskType: "fill_factory_energy" });
+            }
+        }
+
+        console.log(`[GroundSupport] Generated tasks: ${JSON.stringify(tasks.map(t => ({
+            taskType: t.taskType,
+            priority: t.priority,
+            source: t.source,
+            target: t.target,
+            targetType: Game.getObjectById(t.target)?.structureType,
+            resourceType: t.resourceType
+        })))}`);
+        return tasks;
+    }
+
+    private drawTaskInfo(): void {
+        if (!this.creep || !this.creep.room) return;
+
+        const visual = this.creep.room.visual;
+        const pos = new RoomPosition(1, 1, this.creep.room.name);
+        const boxWidth = 20;
+        const boxHeight = 10;
+        const style = {
+            fill: '#000000',
+            opacity: 0.5,
+            stroke: '#ffffff',
+            strokeWidth: 0.1
+        };
+
+        visual.rect(pos.x - 0.5, pos.y - 0.5, boxWidth, boxHeight, style);
+
+        const creepName = this.creep.name;
+        const phase = this.creep.memory.phase || 'Idle';
+        const resourceType = this.creep.memory.resourceType || 'None';
+        const sourceId = this.creep.memory.sourceContainer || 'None';
+        const targetId = this.creep.memory.targetContainer || 'None';
+        const linkSendTo = this.creep.memory.linkSendTo || 'None';
+        const targetType = this.creep.memory.targetContainer ? Game.getObjectById(this.creep.memory.targetContainer)?.structureType || 'Unknown' : 'None';
+        const sourceType = this.creep.memory.sourceContainer ? Game.getObjectById(this.creep.memory.sourceContainer)?.structureType || 'Unknown' : 'None';
+        const working = this.creep.memory.working ? 'Withdraw' : 'Transfer';
+
+        const textStyle = {
+            color: '#ffffff',
+            fontSize: 0.7,
+            align: 'left' as const,
+            opacity: 1
+        };
+        let yOffset = 0;
+        visual.text(`Creep: ${creepName}`, pos.x, pos.y + yOffset++, textStyle);
+        visual.text(`Phase: ${phase}`, pos.x, pos.y + yOffset++, textStyle);
+        visual.text(`Mode: ${working}`, pos.x, pos.y + yOffset++, textStyle);
+        visual.text(`Resource: ${resourceType}`, pos.x, pos.y + yOffset++, textStyle);
+        visual.text(`Source: ${sourceId} (${sourceType})`, pos.x, pos.y + yOffset++, textStyle);
+        visual.text(`Target: ${targetId} (${targetType})`, pos.x, pos.y + yOffset++, textStyle);
+        if (linkSendTo !== 'None') {
+            visual.text(`Link To: ${linkSendTo}`, pos.x, pos.y + yOffset++, textStyle);
+        }
+
+        // Visualize all generated tasks
+        const tasks = this.getTasks();
+        visual.text(`Tasks (${tasks.length}):`, pos.x, pos.y + yOffset++, textStyle);
+        tasks.sort((a, b) => a.priority - b.priority).slice(0, 3).forEach((task, index) => {
+            const target = Game.getObjectById(task.target) as FieldStructure;
+            visual.text(
+                `${task.taskType} (P${task.priority}): ${target.structureType} ${task.resourceType}`,
+                pos.x + 1,
+                pos.y + yOffset++,
+                { ...textStyle, color: task.taskType.includes("tower") ? '#ff0000' : '#ffffff' }
+            );
+        });
+
+        // Visualize tower energy levels
+        const towers = this.room.find<StructureTower>(FIND_STRUCTURES, {
+            filter: s => s.structureType === STRUCTURE_TOWER
+        });
+        towers.forEach((tower, index) => {
+            const energy = tower.store.getUsedCapacity(RESOURCE_ENERGY);
+            const maxEnergy = tower.store.getCapacity(RESOURCE_ENERGY);
+            const color = energy < 400 ? '#ff0000' : energy < 600 ? '#ffff00' : '#00ff00';
+            visual.text(
+                `Tower ${index + 1}: ${energy}/${maxEnergy}`,
+                tower.pos.x + 1,
+                tower.pos.y,
+                { color }
+            );
+            if (this.creep?.memory.targetContainer === tower.id) {
+                visual.circle(tower.pos, { radius: 0.5, fill: 'transparent', stroke: '#ff0000', strokeWidth: 0.1 });
+            }
+        });
+    }
+
+    actions(): void {
+        if (!this.creep || !this.room.storage) {
+            console.log(`[GroundSupport] No creep or storage available`);
+            return;
+        }
+
+        this.initializeMemory();
+
+        // Check if creep needs to switch modes
+        if (this.creep.store.getUsedCapacity() >= this.creep.store.getCapacity()) {
+            this.creep.memory.working = false;
+        } else if (this.creep.store.getUsedCapacity() === 0) {
+            this.creep.memory.working = true;
+        }
+
+        // Log current state
+        console.log(`[GroundSupport] Creep ${this.creep.name} state: phase=${this.creep.memory.phase || 'none'}, working=${this.creep.memory.working}, store=${JSON.stringify(this.creep.store)}`);
+
+        // Handle ongoing transfer task
+        if (this.creep.memory.phase === "inprogress" && this.creep.memory.targetContainer) {
+            const target = Game.getObjectById(this.creep.memory.targetContainer) as FieldStructure | null;
+            if (!target) {
+                console.log(`[GroundSupport] Invalid target container ${this.creep.memory.targetContainer}`);
+                this.creep.memory.phase = null;
+                this.creep.memory.targetContainer = null;
+                this.creep.memory.sourceContainer = null;
+                this.creep.memory.resourceType = null;
+                this.creep.memory.linkSendTo = null;
+                this.drawTaskInfo();
+                return;
+            }
+
+            const resourceType = this.creep.memory.resourceType || RESOURCE_ENERGY;
+
+            if (this.creep.memory.working && this.creep.memory.sourceContainer) {
+                const source = Game.getObjectById(this.creep.memory.sourceContainer) as FieldStructure | null;
+                if (!source) {
+                    console.log(`[GroundSupport] Invalid source container ${this.creep.memory.sourceContainer}`);
+                    this.creep.memory.phase = null;
+                    this.creep.memory.targetContainer = null;
+                    this.creep.memory.sourceContainer = null;
+                    this.creep.memory.resourceType = null;
+                    this.creep.memory.linkSendTo = null;
+                    this.drawTaskInfo();
+                    return;
+                }
+                if (source.structureType === STRUCTURE_LINK && source.store.getUsedCapacity(resourceType) === 0) {
+                    console.log(`[GroundSupport] Link ${source.id} empty for ${resourceType}, clearing task`);
+                    this.creep.memory.phase = null;
+                    this.creep.memory.targetContainer = null;
+                    this.creep.memory.sourceContainer = null;
+                    this.creep.memory.resourceType = null;
+                    this.creep.memory.linkSendTo = null;
+                    this.drawTaskInfo();
+                    return;
+                }
+                if (this.withdrawResource(source, resourceType)) {
+                    this.creep.memory.working = false;
+                }
+                this.drawTaskInfo();
+                return;
+            } else if (!this.creep.memory.working && this.creep.store.getUsedCapacity(resourceType) > 0) {
+                if (this.transferResource(target, resourceType)) {
+                    if (
+                        (target.structureType === STRUCTURE_STORAGE || target.structureType === STRUCTURE_TERMINAL) &&
+                        (target.store.getFreeCapacity(resourceType) === 0 ||
+                            (this.creep.memory.linkSendTo &&
+                                (Game.getObjectById(this.creep.memory.linkSendTo) as StructureLink)?.store.getUsedCapacity(RESOURCE_ENERGY) > 600))
+                    ) {
+                        if (this.creep.memory.linkSendTo) {
+                            const targetLink = Game.getObjectById(this.creep.memory.linkSendTo) as StructureLink | null;
+                            if (!targetLink || targetLink.store.getUsedCapacity(RESOURCE_ENERGY) > 600) {
+                                this.creep.room.memory.data.storagelinkcommand = "";
+                                this.creep.memory.phase = null;
+                                this.creep.memory.linkSendTo = null;
+                                this.creep.memory.targetContainer = null;
+                                this.creep.memory.sourceContainer = null;
+                                this.creep.memory.resourceType = null;
+                            } else {
+                                this.creep.room.memory.data.storagelinkcommand = "outbound";
+                                this.creep.room.memory.data.storagelinktarget = this.creep.memory.linkSendTo;
+                            }
+                        } else {
+                            this.creep.room.memory.data.storagelinkcommand = "inbound";
+                            this.creep.room.memory.data.storagelinktarget = null;
+                            this.creep.memory.phase = null;
+                            this.creep.memory.linkSendTo = null;
+                            this.creep.memory.targetContainer = null;
+                            this.creep.memory.sourceContainer = null;
+                            this.creep.memory.resourceType = null;
+                        }
+                    }
+                }
+                this.drawTaskInfo();
+                return;
+            } else {
+                console.log(`[GroundSupport] Invalid task state: working=${this.creep.memory.working}, sourceContainer=${this.creep.memory.sourceContainer}, store=${JSON.stringify(this.creep.store)}, target=${target.id} (${target.structureType})`);
+                this.creep.memory.phase = null;
+                this.creep.memory.targetContainer = null;
+                this.creep.memory.sourceContainer = null;
+                this.creep.memory.resourceType = null;
+                this.creep.memory.linkSendTo = null;
+                this.drawTaskInfo();
+                return;
+            }
+        }
+
+        // Get and process tasks
+        const tasks = this.getTasks();
+        const sortedTasks = tasks.sort((a, b) => a.priority - b.priority);
+        //const task = sortedTasks.find(t =>
+        //    (t.source && this.creep!.store.getUsedCapacity() === 0 && this.creep!.memory.working) ||
+        //    (!t.source && this.creep!.store.getUsedCapacity(t.resourceType) > 0 && !this.creep!.memory.working)
+        //);
+
+        if (sortedTasks.length > 0) {
+            const task = sortedTasks[0];
+            const target = Game.getObjectById(task.target) as FieldStructure;
+            console.log(`[GroundSupport] Selected task: ${task.taskType}, priority=${task.priority}, source=${task.source || 'none'}, target=${task.target} (${target.structureType}), resource=${task.resourceType}`);
+            if (!task.taskType.includes("tower")) {
+                const towerTasks = tasks.filter(t => t.taskType.includes("tower"));
+                console.log(`[GroundSupport] Skipped tower tasks: ${JSON.stringify(towerTasks.map(t => ({
+                    taskType: t.taskType,
+                    priority: t.priority,
+                    target: t.target,
+                    targetType: Game.getObjectById(t.target)?.structureType,
+                    resourceType: t.resourceType
+                })))}`);
+            }
+            this.creep.memory.phase = "inprogress";
+            this.creep.memory.targetContainer = task.target;
+            this.creep.memory.sourceContainer = task.source || null;
+            this.creep.memory.resourceType = task.resourceType;
+            this.creep.memory.linkSendTo = task.linkSendTo || null;
+            if (task.linkCommand) {
+                this.creep.room.memory.data.storagelinkcommand = task.linkCommand;
+                this.creep.room.memory.data.storagelinktarget = task.linkSendTo || null;
+            }
+            if (task.source && this.creep.memory.working) {
+                const source = Game.getObjectById(task.source) as FieldStructure;
+                if (source.structureType === STRUCTURE_LINK && source.store.getUsedCapacity(task.resourceType) === 0) {
+                    console.log(`[GroundSupport] Link ${source.id} empty for ${task.resourceType}, skipping task`);
+                    this.creep.memory.phase = null;
+                    this.creep.memory.targetContainer = null;
+                    this.creep.memory.sourceContainer = null;
+                    this.creep.memory.resourceType = null;
+                    this.creep.memory.linkSendTo = null;
+                } else {
+                    this.withdrawResource(source, task.resourceType);
+                }
+            } else if (!task.source && this.creep.store.getUsedCapacity(task.resourceType) > 0) {
+                this.transferResource(target, task.resourceType);
+            } else {
+                console.log(`[GroundSupport] Task mismatch: taskType=${task.taskType}, source=${task.source || 'none'}, working=${this.creep.memory.working}, store=${JSON.stringify(this.creep.store)}, target=${task.target} (${target.structureType})`);
+                this.creep.memory.phase = null;
+                this.creep.memory.targetContainer = null;
+                this.creep.memory.sourceContainer = null;
+                this.creep.memory.resourceType = null;
+                this.creep.memory.linkSendTo = null;
+            }
+            this.drawTaskInfo();
+            return;
+        }
+
+        // No tasks, park creep
+        console.log(`[GroundSupport] No suitable tasks found. Parking creep.`);
+        const towerTasks = tasks.filter(t => t.taskType.includes("tower"));
+        if (towerTasks.length > 0) {
+            console.log(`[GroundSupport] Available tower tasks not selected: ${JSON.stringify(towerTasks.map(t => ({
+                taskType: t.taskType,
+                priority: t.priority,
+                target: t.target,
+                targetType: Game.getObjectById(t.target)?.structureType,
+                resourceType: t.resourceType
+            })))}`);
+        }
+        this.parkCreep();
+        this.drawTaskInfo();
     }
 }

@@ -6,72 +6,133 @@ import { RoomHelper } from "utils/RoomHelper";
 import { TravelToOptions, Traveler, TravelData } from "utils/Traveler";
 
 declare global {
-  /*
-    Example types, expand on these or remove them and add your own.
-    Note: Values, properties defined here do no fully *exist* by this type definiton alone.
-          You must also give them an implemention if you would like to use them. (ex. actually setting a `role` property in a Creeps memory)
-
-    Types added in this `global` block are in an ambient, global context. This is needed because `main.ts` is a module file (uses import or export).
-    Interfaces matching on name from @types/screeps will be merged. This is how you can extend the 'built-in' interfaces from @types/screeps.
-  */
-  // Memory extension samples
-  interface Memory {
-    uuid: number;
-    log: any;
-    marketPriceHistory:any;
-    squadSiege?:any;
-  }
-
-  interface CreepMemory {
-    role: string;
-    room: string;
-    working: boolean;
-    squadId?: string;
-    waypoint?: number;
-    operation?: string;
-    _travel?: any;
-  }
-
-  // Syntax for adding proprties to `global` (ex "global.log")
-  namespace NodeJS {
-    interface Global {
-      log: any;
+    interface Memory {
+        uuid: number;
+        log: any;
+        marketPriceHistory: any;
+        squadSiege?: any;
     }
-  }
-  interface Room {
-    memory: RoomMemory;
-  }
-  interface Creep {
-      travelTo(destination: RoomPosition, options?: TravelToOptions):
-          CreepMoveReturnCode | ERR_NO_PATH | ERR_INVALID_TARGET | ERR_NOT_FOUND;
-  }
 
-  interface RoomMemory {
-      owner: string;
-      cacheTime: number;
-      sources: {[sourceid: string]: { x:number, y:number, container:{ id:string, x:number, y:number } } };
-      avoid: number;
-      srcPos: string;
-      level: number;
-      nextTrade: number;
-      nextScan: number;
-      nextRadar: number;
-      radarData: { x: number, y: number };
-      spawnMemory: any;
-      starvedTime: number;
-      occupied: boolean;
-      boostRequests: {[boostType: string]: {flagName: string, requesterIds: string[]} };
-      config: any;
-      data: {
-          storagelinkcommand: string;
-          storagelinktarget: Id<StructureLink> | null;
-          terminal: {
-              energy: number;
-          };
-      };
-  }
+    interface CreepMemory {
+        role: string;
+        room: string;
+        working: boolean;
+        squadId?: string;
+        waypoint?: number;
+        operation?: string;
+        _travel?: any;
+        boosted?: boolean;
+        boostedParts?: BodyPartConstant[];
+        targetContainer?: Id<FieldStructure> | null;
+        sourceContainer?: Id<FieldStructure> | null;
+        linkSendTo?: Id<StructureLink> | null;
+        resourceType?: GSResourceTypes | null;
+        phase?: string | null;
+    }
 
+    namespace NodeJS {
+        interface Global {
+            log: any;
+        }
+    }
 
+    interface Room {
+        memory: RoomMemory;
+    }
+
+    interface Creep {
+        travelTo(destination: RoomPosition, options?: TravelToOptions): CreepMoveReturnCode | ERR_NO_PATH | ERR_INVALID_TARGET | ERR_NOT_FOUND;
+    }
+
+    interface RoomMemory {
+        owner: string;
+        cacheTime: number;
+        sources: { [sourceid: string]: { x: number, y: number, container: { id: string, x: number, y: number } } };
+        avoid: number;
+        srcPos: string;
+        level: number;
+        nextTrade: number;
+        nextScan: number;
+        nextRadar: number;
+        radarData: { x: number, y: number };
+        spawnMemory: any;
+        starvedTime: number;
+        occupied: boolean;
+        boostRequests: { [boostType: string]: { flagName: string, requesterIds: string[] } };
+        config: any;
+        data: {
+            storagelinkcommand: string;
+            storagelinktarget: Id<StructureLink> | null;
+            terminal: { energy: number };
+            labs: {
+                reagents: { id: Id<StructureLab>, component: ResourceConstant }[];
+                products: { id: Id<StructureLab> }[];
+                boosts: { id: Id<StructureLab>, component: ResourceConstant }[];
+            };
+        };
+    }
+
+    interface TravelToOptions {
+        reusePath?: number;
+        maxRooms?: number;
+
+        [key: string]: any;
+    }
+
+    type FieldStructure =
+        StructureSpawn
+        | StructureExtension
+        | StructureStorage
+        | StructureContainer
+        | StructureLink
+        | StructureTerminal
+        | StructureTower
+        | StructureLab
+        | StructureNuker
+        | StructureFactory
+        | StructurePowerSpawn;
+    type GSResourceTypes =
+        ResourceConstant
+        | "mist"
+        | "biomass"
+        | "metal"
+        | "silicon"
+        | "utrium_bar"
+        | "lemergium_bar"
+        | "zynthium_bar"
+        | "keanium_bar"
+        | "ghodium_melt"
+        | "oxidant"
+        | "reductant"
+        | "purifier"
+        | "battery"
+        | "composite"
+        | "crystal"
+        | "liquid"
+        | "wire"
+        | "switch"
+        | "transistor"
+        | "microchip"
+        | "circuit"
+        | "device"
+        | "cell"
+        | "phlegm"
+        | "tissue"
+        | "muscle"
+        | "organoid"
+        | "organism"
+        | "alloy"
+        | "tube"
+        | "fixtures"
+        | "frame"
+        | "hydraulics"
+        | "machine"
+        | "condensate"
+        | "concentrate"
+        | "extract"
+        | "spirit"
+        | "emanation"
+        | "essence";
 }
 
 // When compiling TS to JS and bundling with rollup, the line numbers and file names in error messages change
@@ -97,6 +158,11 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
   RoomHelper.loadRoomMemory();
 
+    if (Game.cpu.bucket < 3000) {
+        console.log(`<span style="color:red">CPU Bucket Low: ${Game.cpu.bucket}</span>`);
+        return;
+    }
+
   // Load system level tasks for game
   let operations = OperationHelper.getOperations()
 
@@ -109,7 +175,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
           let beforeCpu = Game.cpu.getUsed();
           operation.init();
           if (Game.shard.name == 'shard3') {
-              console.log(`INIT ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+              //console.log(`INIT ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
           }
       } catch (error: any) {
         console.log(error);
@@ -125,7 +191,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
           let beforeCpu = Game.cpu.getUsed();
           operation.roleCall();
           if (Game.shard.name == 'shard3') {
-              console.log(`ROLECALL ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+              //console.log(`ROLECALL ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
           }
       } catch (e) {
           console.log(e);
@@ -144,7 +210,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
           console.log(e);
       }
       if (Game.shard.name == 'shard3') {
-          console.log(`ACTIONS ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+          //console.log(`ACTIONS ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
       }
       let tickCPULimit = Game.cpu.shardLimits[Game.shard.name];
       if (Game.cpu.bucket < 5000) {

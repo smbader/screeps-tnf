@@ -21,6 +21,29 @@ export var RoomHelper = {
 
     loadRoomMemory: function() {
 
+        /*
+        for (var roomid in Memory.rooms) {
+
+            let room = Game.rooms[roomid];
+            if (!room) {
+                continue;
+            }
+            if (room.controller?.owner?.username != 'ricane') {
+                continue;
+            }
+            if (!room.memory.config || room.memory.config.type !== 'owned') {
+                continue;
+            }
+            if (!room.memory.data.labs) {
+                room.memory.data.labs = {
+                    reagents: [],
+                    products: [],
+                    boosts: []
+                };
+            }
+        }
+         */
+
         if (Game.rooms['W18S9']) {
             let dataW18S9 = W18S9.getConfig();
             let room = Game.rooms['W18S9'];
@@ -31,6 +54,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -49,6 +77,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -67,6 +100,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -85,6 +123,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -102,6 +145,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -119,6 +167,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -136,6 +189,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -153,6 +211,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -170,6 +233,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -187,6 +255,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -205,6 +278,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -223,6 +301,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }
@@ -241,6 +324,11 @@ export var RoomHelper = {
                     storagelinktarget: null,
                     terminal: {
                         energy: 0
+                    },
+                    labs: {
+                        reagents: [],
+                        products: [],
+                        boosts: [],
                     }
                 };
             }

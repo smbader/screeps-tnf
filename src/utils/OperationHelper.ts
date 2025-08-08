@@ -24,9 +24,9 @@ const OPERATION_CLASSES: Type_Operation_Classes = {
     //remoteattack: RemoteAttack,
     //expansionmanagement: ExpansionManagement,   // 8
     //emergencyservices: EmergencyServices,       // 1
-    market: Market,                             // 5
     roomdefense: RoomDefense,                   // 3
     energymanagement: EnergyManagement,         // 2
+    market: Market,                             // 5
     constructioncompany: ConstructionCompany,   // 4
     //remotefarming: RemoteFarming,               // 7
     //powerfarming: PowerFarming,                 // 6
@@ -48,11 +48,11 @@ export var OperationHelper = {
             const waypoints = [
                 {x: 36, y: 39, room: 'W13N1'},
                 {x: 45, y: 10, room: 'W10N0'},
-                {x: 4, y: 25, room: 'W4N0'},
+                {x: 4, y: 25, room: 'W1N0'},
                 // more...
             ];
-            //let siege = new SquadSiegeOperation("W4N1", "W13N1", waypoints);
-            //operationList.push(siege);
+            let siege = new SquadSiegeOperation("W1N1", "W13N1", waypoints);
+            operationList.push(siege);
 
             //let siege2 = new SquadSiegeOperation("W4N1", "W13N1", waypoints);
             //operationList.push(siege2);
