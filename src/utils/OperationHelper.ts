@@ -51,8 +51,12 @@ export var OperationHelper = {
                 {x: 4, y: 25, room: 'W1N0'},
                 // more...
             ];
-            let siege = new SquadSiegeOperation("W1N1", "W13N1", waypoints);
-            operationList.push(siege);
+
+            if (Game.time < (72077432 + 1400)  ) {
+                let siege = new SquadSiegeOperation("W1N1", "W13N1", waypoints);
+                operationList.push(siege);
+            }
+
 
             //let siege2 = new SquadSiegeOperation("W4N1", "W13N1", waypoints);
             //operationList.push(siege2);

@@ -137,6 +137,19 @@ export class Hauler extends Operator {
                 let maxEnergy = 0;
 
                 for (let container of containers) {
+
+                    let notThisContainer = false;
+                    if (this.creep.room.memory.config.fieldContainers) {
+                        for (const fc of this.creep.room.memory.config.fieldContainers) {
+                            if (container.pos.x == fc.x && container.pos.y == fc.y ) {
+                                notThisContainer = true;
+                            }
+                        }
+                    }
+                    if (notThisContainer) {
+                        continue;
+                    }
+
                     if (container.store.getUsedCapacity(RESOURCE_ENERGY) > maxEnergy) {
                         maxEnergy = container.store[RESOURCE_ENERGY];
                         targetContainer = container;

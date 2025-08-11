@@ -60,6 +60,19 @@ declare global {
         occupied: boolean;
         boostRequests: { [boostType: string]: { flagName: string, requesterIds: string[] } };
         config: any;
+        _cachedLinks?: {
+            storage?: Id<StructureLink>;
+            controller?: Id<StructureLink>;
+            field?: Id<StructureLink>[];
+        };
+        _gs_linkDebugInfo?: string[];
+        _gs_links?: {
+            storage?: Id<StructureLink>;
+            controller?: Id<StructureLink>;
+            sources: Id<StructureLink>[];
+            fields: Id<StructureLink>[];
+        };
+        _gs_energyState?: string;
         data: {
             storagelinkcommand: string;
             storagelinktarget: Id<StructureLink> | null;
