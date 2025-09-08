@@ -53,3 +53,7 @@ To visit the docs, [click here](https://screepers.gitbook.io/screeps-typescript-
 ## Contributing
 
 Issues, Pull Requests, and contribution to the docs are welcome! See our [Contributing Guidelines](CONTRIBUTING.md) for more details.
+
+## AI Assistant Guidelines
+
+For AI assistants and copilots working on this Screeps AI codebase, comprehensive instructions are available in [`.copilot-instructions.md`](.copilot-instructions.md). This document covers project structure, current AI architecture, coding patterns, safety guidelines, and common tasks specific to Screeps development.
