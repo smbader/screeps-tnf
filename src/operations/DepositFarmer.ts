@@ -7,8 +7,8 @@ export class DepositFarmer extends Operation {
 
     operationOperators:Operator[];
     depositRooms:any[] = [
-        /*{ target: 'W11N0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W12N0', source: 'W13N2', 'shard': 'shard3' },
+        { target: 'E30N1', source: 'E31N1', 'shard': 'shard1' },
+        /*{ target: 'W12N0', source: 'W13N2', 'shard': 'shard3' },
         { target: 'W13N0', source: 'W13N2', 'shard': 'shard3' },
         { target: 'W14N0', source: 'W13N2', 'shard': 'shard3' },
         { target: 'W15N0', source: 'W13N2', 'shard': 'shard3' },

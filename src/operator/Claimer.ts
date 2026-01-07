@@ -1,4 +1,3 @@
-import { extend } from "lodash";
 import { Operator } from "../classes/operator";
 
 interface ClaimerMemory extends CreepMemory {
@@ -76,7 +75,7 @@ export class Claimer extends Operator {
         if (this.creep.memory.targetRoom !== this.creep.room.name) {
 
             let roomPos = new RoomPosition(25, 25, this.creep.memory.targetRoom)
-            this.creep.travelTo(roomPos);
+            this.creep.say('' + this.creep.travelTo(roomPos));
             return;
         }
 

@@ -1,4 +1,3 @@
-import { extend } from "lodash";
 import { Operator } from "../classes/operator";
 import {MapHelper} from "../utils/MapHelper";
 
@@ -50,6 +49,31 @@ export class TinyFarmer extends Operator {
         // While you're harvesting continue until you're full.
         if (this.creep.memory.working == true) {
 
+            if (this.creep.ticksToLive && this.creep.ticksToLive < 1400 &&
+                this.creep.pos.roomName == this.room.name &&
+                this.creep.store.getUsedCapacity() == 0 && this.room.energyAvailable >= 300) {
+
+                // Renew yourself.
+                let spawn = this.creep.pos.findClosestByPath(FIND_MY_SPAWNS, {
+                    filter: structure => (!(structure.spawning && structure.spawning.remainingTime >= 0))
+                });
+                if (spawn) {
+                    let range = this.creep.pos.getRangeTo(spawn);
+
+                    if (range > 9) {
+                        // Already leaving
+                    } else {
+                        if (range == 1) {
+                            spawn.renewCreep(this.creep);
+                        } else {
+                            this.creep.travelTo(spawn.pos);
+                        }
+                        return;
+                    }
+                }
+            }
+            this.creep.memory.target = this.creep.memory.assignedTarget;
+
             if (this.creep.memory.target == null) {
 
                 if (this.creep.memory.assignedTarget) {
@@ -63,16 +87,20 @@ export class TinyFarmer extends Operator {
 
                 let target = Game.getObjectById(this.creep.memory.target);
 
-                if (!target) {
-                    // Go to target room first.
-                    if (this.creep.pos.roomName != this.creep.memory.targetRoom) {
-                        this.creep.travelTo(new RoomPosition(25, 25, this.creep.memory.targetRoom));
-                        this.creep.say('58');
-                        return;
-                    }
+                // Go to target room first.
+                if (this.creep.pos.roomName != this.creep.memory.targetRoom) {
+                    this.creep.travelTo(new RoomPosition(25, 25, this.creep.memory.targetRoom));
+                    this.creep.say('58');
+                    return;
                 }
 
-                let keeper = target.pos.findClosestByRange(FIND_HOSTILE_CREEPS);
+/*
+                let keeper = target.pos.findClosestByRange(FIND_HOSTILE_CREEPS, {
+                    filter: (c: Creep) => (
+                        _.filter(c.body, function(bp){return bp.type == "ranged_attack"}).length > 0 ||
+                        _.filter(c.body, function(bp){return bp.type == "attack"}).length > 0
+                    )
+                });
                 if (keeper) {
 
                     let enemyRange = this.creep.pos.getRangeTo(keeper);
@@ -89,17 +117,30 @@ export class TinyFarmer extends Operator {
                         return;
                     }
                 }
-
+*/
                 let resources = target.pos.findInRange(FIND_DROPPED_RESOURCES, 5);
                 if (resources.length > 0) {
                     let result = this.creep.pickup(resources[0]);
                     if (result == ERR_NOT_IN_RANGE) {
                         this.creep.travelTo(resources[0].pos);
-                        this.creep.say('98');
+                        this.creep.say('98 ' + target.pos.x + ',' + target.pos.y);
                         return;
                     }
                 }
-
+/*
+                let container = target.pos.findInRange(FIND_STRUCTURES, 5);
+                if (container && container.type == STRUCTURE_CONTAINER && container.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+                    const result = this.creep.withdraw(container, RESOURCE_ENERGY);
+                    if (result == ERR_NOT_IN_RANGE) {
+                        this.creep.travelTo(container.pos);
+                        this.creep.say('🚚');
+                        return;
+                    } else if (result == OK) {
+                        this.creep.say('🏗️');
+                        return;
+                    }
+                }
+*/
                 let actionresult = this.creep.harvest(target);
 
                 if (actionresult == ERR_NOT_IN_RANGE) {
@@ -127,6 +168,18 @@ export class TinyFarmer extends Operator {
                     this.creep.travelTo(new RoomPosition(25, 25, this.room.name));
                     return;
                 }
+
+                if (this.room.controller) {
+                    let spawnConstruction = this.room.controller.pos.findClosestByRange(FIND_CONSTRUCTION_SITES);
+
+                    if (spawnConstruction) {
+                        if (this.creep.build(spawnConstruction) == ERR_NOT_IN_RANGE) {
+                            this.creep.travelTo(spawnConstruction.pos);
+                            return;
+                        }
+                    }
+                }
+
 
                 let target = this.creep.pos.findClosestByPath<StructureContainer>(FIND_STRUCTURES, {
                     filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE)

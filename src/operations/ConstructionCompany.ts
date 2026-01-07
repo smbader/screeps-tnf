@@ -16,7 +16,6 @@ export class ConstructionCompany extends Operation {
     // This operation is for what rooms we own and have spawns in.
 
     // Either the room is in active upgrading or just needs sustained at level 8.
-
     for (const roomid in Game.rooms) {
       // roomid (E43S27) is the current room being evaluated
       const room = Game.rooms[roomid];
@@ -34,7 +33,6 @@ export class ConstructionCompany extends Operation {
 
       // To be productive, we need a spawn
       const spawns = room.find(FIND_MY_SPAWNS);
-
       if (spawns.length === 0) {
         continue;
       } else {

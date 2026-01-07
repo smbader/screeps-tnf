@@ -79,9 +79,13 @@ export class EmergencyWorker extends Operator {
                 let resources = this.creep.room.lookForAt(LOOK_RESOURCES, this.creep.room.memory.sources[this.memory.sourceid].container.x, this.creep.room.memory.sources[this.memory.sourceid].container.y);
 
                 // Look for the nearest container to the source.
-                let targets = this.source.pos.findInRange<StructureContainer>(FIND_STRUCTURES, 5,{
-                    filter: (structure) => structure.structureType == STRUCTURE_CONTAINER
+                let targets:any = this.source.pos.findInRange<StructureContainer>(FIND_STRUCTURES, 5,{
+                    filter: (structure) => (structure.structureType == STRUCTURE_CONTAINER && structure.store.getUsedCapacity(RESOURCE_ENERGY) > 0)
                 });
+
+                if (targets.length == 0 && resources.length == 0 && this.room.terminal && this.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+                    targets.push(this.room.terminal);
+                }
 
                 if (resources.length > 0) {
                     let target = resources[0];
@@ -144,7 +148,9 @@ export class EmergencyWorker extends Operator {
             }
 
         } else {
-
+            if (this.creep.memory.action) {
+                this.creep.say(this.creep.memory.action);
+            }
             if (this.creep.memory.target == null) {
 
                 // IF TOWERS NEED ENERGY
@@ -162,7 +168,6 @@ export class EmergencyWorker extends Operator {
                     if (this.room.storage && this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 5000) {
                         empty = this.room.storage;
                     }
-
                 }
 
                 if (targets.length > 0) {

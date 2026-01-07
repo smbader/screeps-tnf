@@ -1,5 +1,6 @@
 import { Operation } from "../classes/operation";
 import { Operator } from "../classes/operator";
+import {Field} from "../operator/Field";
 import { RoomHealer } from "../operator/RoomHealer";
 import { RoomFighter } from "../operator/RoomFighter";
 import { MapHelper } from "../utils/MapHelper";
@@ -60,12 +61,14 @@ export class RoomDefense extends Operation {
               });
 
               // Find worst structure for emergency repair once
+
               let worststructure: AnyStructure | null = null;
               if (
                   (room.terminal && room.memory.nextTrade &&
-                      room.memory.nextTrade - Game.time <= 10) ||
-                  (room.storage &&
-                      room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 930000)
+                      room.memory.nextTrade - Game.time <= 10)
+                  //||
+                  //(room.storage &&
+                  //    room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 930000)
               ) {
                   for (const damageStructure of damagedStructures) {
                       if (
@@ -154,6 +157,42 @@ export class RoomDefense extends Operation {
               //console.log(`    Clocking in: ` +  operationOperator.name + ' (' + creepOperator.ticksToLive  + ')');
           } else {
 
+              var controllerLevel = 0;
+              if (operationOperator.room && operationOperator.room.controller) {
+                  controllerLevel = operationOperator.room.controller.level;
+              }
+
+              let gsRequested = false;
+              // New employement
+              if (operationOperator instanceof GroundSupport && operationOperator.room.memory.config) {
+                  if (operationOperator.room.memory.config.chemist.spawn) {
+                      if (controllerLevel > 3) {
+
+                          let spawnX = operationOperator.room.memory.config.chemist.spawn.x;
+                          let spawnY = operationOperator.room.memory.config.chemist.spawn.y;
+
+                          let spawn = operationOperator.room.find<StructureSpawn>(FIND_MY_STRUCTURES, {
+                              filter: function(object) {
+                                  return object.structureType === STRUCTURE_SPAWN &&
+                                      object.pos.x === spawnX &&
+                                      object.pos.y === spawnY;
+                              }
+                          })[0];
+
+                          let operatorParts:BodyPartConstant[] = [];
+                          let haulerParts = Math.min(16, Math.max(4, Math.floor(operationOperator.room.energyAvailable / 100)));
+                          for (let i = 1; i <= haulerParts; i++) {
+                              operatorParts.push(CARRY);
+                              operatorParts.push(MOVE);
+                          }
+                          console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: operationOperator.room.memory.config.chemist.spawndirection }));
+
+                          gsRequested = true;
+                      }
+                  }
+              }
+
+
               // Spawn him.
               let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
 
@@ -167,10 +206,7 @@ export class RoomDefense extends Operation {
                               spawnDirection = spawnconfig.direction;
                           }
                       }
-                      var controllerLevel = 0;
-                      if (spawn.room && spawn.room.controller) {
-                          controllerLevel = spawn.room.controller.level;
-                      }
+
 
                       if (!spawn.spawning) {
 
@@ -184,7 +220,7 @@ export class RoomDefense extends Operation {
                           }
 
 
-                          if (controllerLevel <= 3) {
+                          if (controllerLevel <= 3 && gsRequested) {
                               continue;
                           }
                           if (operationOperator instanceof GroundSupport) {
@@ -197,8 +233,6 @@ export class RoomDefense extends Operation {
                               console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]}));
 
                           }
-
-
                       }
 
                   }

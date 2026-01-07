@@ -49,7 +49,7 @@ export class RoomFighter extends Operator {
         if (this.creep.memory.waypoint == undefined || this.creep.memory.waypoint == null)  {
             this.creep.memory.waypoint = 0;
         }
-        console.log('52');
+
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.waypoints != undefined) {
             if (this.waypoints[this.creep.memory.waypoint]) {
@@ -65,14 +65,14 @@ export class RoomFighter extends Operator {
                 return;
             }
         }
-        console.log('69');
+
         if (this.creep.memory.targetRoom !== this.creep.room.name) {
 
             let roomPos = new RoomPosition(25, 25, this.creep.memory.targetRoom)
             this.creep.travelTo(roomPos);
             return;
         }
-        console.log('76');
+
        // if ((this.creep.hitsMax - this.creep.hits) < 2750) {
             //hold for heal
           //  return;
@@ -85,7 +85,7 @@ export class RoomFighter extends Operator {
 
         //let target = this.creep.pos.findInRange(FIND_HOSTILE_CREEPS, 3);
         let target = this.creep.pos.findClosestByPath(FIND_HOSTILE_CREEPS);
-        console.log('87');
+
         if (target) {
             //let enemyRange = this.creep.pos.getRangeTo(target.pos);
 

@@ -1,4 +1,3 @@
-import internal from "stream";
 import { ErrorMapper } from "utils/ErrorMapper";
 import { MapHelper } from "utils/MapHelper";
 import { OperationHelper } from "utils/OperationHelper";
@@ -15,8 +14,8 @@ declare global {
 
     interface CreepMemory {
         role: string;
-        room: string;
-        working: boolean;
+        room?: string;
+        working?: boolean;
         squadId?: string;
         waypoint?: number;
         operation?: string;
@@ -28,6 +27,8 @@ declare global {
         linkSendTo?: Id<StructureLink> | null;
         resourceType?: GSResourceTypes | null;
         phase?: string | null;
+        targetRoom?: string | null;
+        targetFighter?: string;
     }
 
     namespace NodeJS {
@@ -72,7 +73,15 @@ declare global {
             sources: Id<StructureLink>[];
             fields: Id<StructureLink>[];
         };
+        _gs_linkPct?: any;
         _gs_energyState?: string;
+        powerHarvest?:{
+            _observedRoom?: string;
+            banks: PowerBankMemory[];
+            lastScan?: number;
+            scannedRooms?: { [roomName: string]: number };
+        };
+        _observedRoom?: string;
         data: {
             storagelinkcommand: string;
             storagelinktarget: Id<StructureLink> | null;
@@ -83,6 +92,27 @@ declare global {
                 boosts: { id: Id<StructureLab>, component: ResourceConstant }[];
             };
         };
+    }
+
+    interface PowerBankMemory {
+        room: string;
+        pos: RoomPosition;
+        ticksToDecay: number;
+        power: number;
+        lastChecked: number;
+        state: "waiting" | "breaking" | "hauling" | "done";
+        homeRoom?: string;
+        fighterNames?: string[];
+        healerNames?: string[];
+        haulerNames?: string[];
+        claimedBy?: string;
+    }
+
+    interface PowerHarvestMemory {
+        banks: PowerBankMemory[];
+        lastScan: number;
+        scannedRooms?: { [roomName: string]: number }; // roomName -> last scan time
+        _observedRoom?: string;
     }
 
     interface TravelToOptions {
@@ -163,6 +193,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
         }
     }
 
+
   // Display current game tick to the console.
   //console.log(`Current game tick is ${Game.time}`);
   //console.log(`vvvvvvvv  Start of tick  vvvvvvvv`);
@@ -223,7 +254,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
           console.log(e);
       }
       if (Game.shard.name == 'shard3') {
-          //console.log(`ACTIONS ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
+         // console.log(`ACTIONS ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
       }
       let tickCPULimit = Game.cpu.shardLimits[Game.shard.name];
       if (Game.cpu.bucket < 5000) {
@@ -243,8 +274,6 @@ export const loop = ErrorMapper.wrapLoop(() => {
       ct ++;
   }
 
-    console.log(` `);
-
     for (var roomid in Memory.rooms) {
 
         let room = Game.rooms[roomid];
@@ -258,14 +287,12 @@ export const loop = ErrorMapper.wrapLoop(() => {
         if ((room.memory.nextTrade) + 10 < Game.time ) {
             room.memory.nextTrade = Game.time + (Math.floor(Math.random() * (300 - 250 + 1)) + 250);
         }
-        //let storageEnergy = 0;
-        //if (room.storage) {
-        //    storageEnergy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
-        //}
+        let storageEnergy = 0;
+        if (room.storage) {
+            storageEnergy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
+        }
         //console.log(room.name + ' (' + room.controller.level + ') ' +
         //    'Room Counter: ' + (room.memory.nextTrade - Game.time) + ' ' +
-        //    'Next Trade: ' + room.memory.nextTrade + ' ' +
-        //    'Game.time: ' + Game.time + ' ' +
         //    'Storage Energy: ' + storageEnergy + ' ' +
         //    'Terminal Energy: ' + room.memory.data.terminal.energy);
     }

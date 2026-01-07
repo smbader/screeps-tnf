@@ -2,7 +2,8 @@ import { Operator } from "../classes/operator";
 import { MapHelper } from "../utils/MapHelper";
 import {ClaimerCreep} from "./Claimer";
 
-type SupplyStructure = StructureExtension | StructureSpawn | StructureTower | StructureLab;
+type SupplyStructure = StructureExtension | StructureSpawn | StructureTower | StructureLab | StructureStorage;
+type EnergyStructure = StructureContainer | StructureTerminal | StructureStorage;
 
 interface RemoteWorkerMemory extends CreepMemory {
     targetResources: Id<Resource> | null;
@@ -42,9 +43,10 @@ export class RemoteWorker extends Operator {
                 this.creep = new RemoteWorkerCreep(Game.creeps[this.name].id, targetRoom.name);
                 if (sourceid == null || sourceid == '') {
                     let parts = this.name.split("_");
+                    let sources = targetRoom.find(FIND_SOURCES);
                     // @ts-ignore
-                    let sid = (1 + parts[2]) % 2;
-this.creep.say(' '+ sid);
+                    let sid = (1 + parts[2]) % sources.length;
+
                     sourceid = targetRoom.find(FIND_SOURCES)[sid].id;
                 }
             } else {
@@ -76,7 +78,7 @@ this.creep.say(' '+ sid);
              this.creep.memory.working == true;
          }
 
-        this.creep.say(this.creep.memory.waypoint + ' ');
+        //this.creep.say(this.creep.memory.waypoint + ' ');
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.waypoints != undefined) {
             if (this.waypoints[this.creep.memory.waypoint]) {
@@ -111,11 +113,11 @@ this.creep.say(' '+ sid);
         // While you're harvesting continue until you're full.
         if ( this.creep.memory.working == true) {
             // Am I in range of the source?  If not, let's focus on that.
-            if (this.creep.pos.getRangeTo(this.source) > 6) {
-                this.creep.say('closer');
-                this.creep.travelTo(this.source.pos);
-                return;
-            }
+            //if (this.creep.pos.getRangeTo(this.source) > 6) {
+            //    this.creep.say('closer');
+            //    this.creep.travelTo(this.source.pos);
+            //    return;
+            //}
 
             if (this.creep.memory.target == null) {
 
@@ -127,11 +129,27 @@ this.creep.say(' '+ sid);
                 let resources = this.creep.room.lookForAt(LOOK_RESOURCES, this.creep.room.memory.sources[this.source.id].container.x, this.creep.room.memory.sources[this.source.id].container.y);
 
                 // Look for the nearest container to the source.
-                let targets = this.source.pos.findInRange<StructureContainer>(FIND_STRUCTURES, 5,{
-                    filter: (structure) => structure.structureType == STRUCTURE_CONTAINER
-                });
+                let targets:EnergyStructure[] = [];
+                if (this.creep.room.controller) {
+                    targets = this.creep.room.controller.pos.findInRange<EnergyStructure>(FIND_STRUCTURES, 13,{
+                        filter: (structure) => (
+                            structure.structureType == STRUCTURE_CONTAINER ||
+                            structure.structureType == STRUCTURE_STORAGE ||
+                            structure.structureType == STRUCTURE_TERMINAL
+                        )
+                    });
+                }
 
-                if (resources.length > 0) {
+                this.creep.say('' + targets.length);
+
+                if (targets.length > 0) {
+
+                    if (targets[0].store.getUsedCapacity(RESOURCE_ENERGY) > 50) {
+                        let target = targets[0];
+                        this.creep.memory.target = target.id;
+                        this.creep.memory.action = 'withdraw';
+                    }
+                } else if (resources.length > 0) {
                     let target = resources[0];
 
                     for (let t in resources) {
@@ -149,13 +167,6 @@ this.creep.say(' '+ sid);
                     this.creep.memory.target = target.id;
                     this.creep.memory.action = 'pickup';
 
-                } else if (targets.length > 0) {
-
-                    if (targets[0].store.getUsedCapacity(RESOURCE_ENERGY) > 50) {
-                        let target = targets[0];
-                        this.creep.memory.target = target.id;
-                        this.creep.memory.action = 'withdraw';
-                    }
                 }
             } else {
 
@@ -206,8 +217,8 @@ this.creep.say(' '+ sid);
                 let empty = this.creep.pos.findClosestByRange(FIND_STRUCTURES, {
                     filter: function(object:SupplyStructure) {
                         return (
-                            //(object.structureType == STRUCTURE_TOWER || object.structureType == STRUCTURE_EXTENSION || object.structureType == STRUCTURE_SPAWN) &&
-                            (object.structureType == STRUCTURE_TOWER) &&
+                            ( object.structureType == STRUCTURE_SPAWN  ) &&
+                            //(object.structureType == STRUCTURE_TOWER) &&
                             (object.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
                         );
                     }

@@ -147,6 +147,19 @@ export class Field extends Operator {
                 }
             });
 
+            // Find structures that match configured container positions
+            const matching = structures.filter(s =>
+                containers.some((c: { x: number; y: number; }) => c.x === s.pos.x && c.y === s.pos.y)
+            );
+
+            // Choose the closest matching structure to the creep (path first, fallback to range)
+            let target: Structure | null = null;
+            if (matching.length > 0) {
+                target = creep.pos.findClosestByPath(matching) || creep.pos.findClosestByRange(matching);
+            }
+            let foundTarget = !!target;
+
+            /*
             let foundTarget = false;
             let target = null;
             // looping through all empty containers in the room
@@ -160,6 +173,9 @@ export class Field extends Operator {
                 }
                 if (foundTarget) {break;}
             }
+             */
+
+
             if (target) {
                 const result = creep.transfer(target, RESOURCE_ENERGY);
                 if (result === ERR_NOT_IN_RANGE) {

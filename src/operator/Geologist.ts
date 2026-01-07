@@ -57,8 +57,10 @@ export class Geologist extends Operator {
                 }
                 return;
             }
+
             // Harvest from mineral
             const mineral = Game.getObjectById<Mineral>(creep.memory.target);
+
             if (mineral) {
                 const result = creep.harvest(mineral);
                 if (result === ERR_NOT_IN_RANGE) {
@@ -94,7 +96,7 @@ export class Geologist extends Operator {
 
         // Transfer all resources in creep's store to target
         const target = Game.getObjectById<StructureStorage | StructureTerminal>(creep.memory.target);
-        if (target) {
+        if (target && (target.structureType === STRUCTURE_STORAGE || target.structureType === STRUCTURE_TERMINAL)) {
             let transferred = false;
             for (const resourceType in creep.store) {
                 if (creep.store[resourceType as ResourceConstant] > 0) {

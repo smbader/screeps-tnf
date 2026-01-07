@@ -11,8 +11,15 @@ export class RemoteFarming extends Operation {
 
     operationOperators:Operator[];
     expansionRooms:any[] = [
-        //{ target: 'W18S6', source: 'W19S6', 'shard': 'shard0' },
-        { target: 'W3N1', source: 'W4N1', 'shard': 'shard3' },
+        { target: 'E31N2', source: 'E31N1', 'shard': 'shard1' },
+        { target: 'E32N3', source: 'E31N3', 'shard': 'shard1' },
+        { target: 'E31N4', source: 'E31N3', 'shard': 'shard1' },
+        //{ target: 'E32N4', source: 'E31N3', 'shard': 'shard1' },
+        //{ target: 'W27N8', source: 'W27N9', 'shard': 'shard0' },
+        //{ target: 'W28N8', source: 'W28N7', 'shard': 'shard0' },
+        //{ target: 'W29N5', source: 'W29N6', 'shard': 'shard0' },
+        //{ target: 'W29N7', source: 'W29N6', 'shard': 'shard0' },
+        //{ target: 'W3N1', source: 'W4N1', 'shard': 'shard3' },
         //{ target: 'W18S14', source: 'W18S13', 'shard': 'shard0' },
     ];
 
@@ -49,16 +56,17 @@ export class RemoteFarming extends Operation {
                 let targetRoom = Game.rooms[expansionRoom.target];
 
                 let idx = 0;
+
                 if (targetRoom.memory.sources) {
                     for(var sourceid in targetRoom.memory.sources) {
 
                         name = 'RemoteHarvester_' + expansionRoom.target + '_3_' + idx;
-                        let hoperator = new Harvester(name, sourceRoom, sourceid, targetRoom);
+                        let hoperator = new Harvester(name, sourceRoom, sourceid as Id<Source>, targetRoom);
                         this.operationOperators.push(hoperator);
 
                         for (let i = 1; i <= 2; i++) {
                             name = 'RemoteHauler_' + expansionRoom.target + '_' + i + '_' + idx;
-                            let rhoperator = new Hauler(name, sourceRoom, sourceid);
+                            let rhoperator = new Hauler(name, sourceRoom, sourceid, false);
                             this.operationOperators.push(rhoperator);
                         }
                         idx++;
@@ -80,7 +88,7 @@ export class RemoteFarming extends Operation {
                     let idx = 0;
                     for(var source in targetRoom.memory.config.energysources) {
 
-                        for (let i = 1; i <= 2; i++) {
+                        for (let i = 1; i <= targetRoom.memory.config.energysources[source].tinyfarmers; i++) {
                             let name = 'TinyFarmer_' + expansionRoom.target + '_' + i + '_' + idx;
                             let rhoperator = new TinyFarmer(name, sourceRoom, targetRoom.name, targetRoom.memory.config.energysources[source].id);
                             this.operationOperators.push(rhoperator);
@@ -91,9 +99,6 @@ export class RemoteFarming extends Operation {
 
 
             }
-
-
-
 
         }
     }
@@ -118,6 +123,7 @@ export class RemoteFarming extends Operation {
                         if (!spawn.spawning) {
                             let spawnDirection = LEFT;
                             for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+                                console.log('spawnconfig x: ' + spawnconfig.x + ' spawn pos x: ' + spawn.pos.x + ' spawnconfig y: ' + spawnconfig.y + ' spawn pos y: ' + spawn.pos.y);
                                 if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
                                     spawnDirection = spawnconfig.direction;
                                 }
@@ -130,7 +136,7 @@ export class RemoteFarming extends Operation {
 
                             if (operationOperator instanceof TinyFarmer) {
                                 console.log(`    Spawning: ` + operationOperator.name);
-                                spawn.spawnCreep([WORK, CARRY, MOVE, CARRY ,MOVE ], operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep([WORK, CARRY, MOVE, MOVE ], operationOperator.name, { directions: [spawnDirection]});
                             }
 
                             if (operationOperator instanceof Claimer) {
@@ -149,7 +155,7 @@ export class RemoteFarming extends Operation {
                             }
 
                             if (operationOperator instanceof Harvester) {
-                                if (Game.rooms[operationOperator.memory.targetroom] &&
+                                if (Game.rooms[operationOperator.targetroom.name] &&
                                     operationOperator.room.storage &&
                                     operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000) {
 
@@ -157,7 +163,7 @@ export class RemoteFarming extends Operation {
                                         CARRY, WORK, WORK, WORK, WORK, WORK, WORK], operationOperator.name, { directions: [spawnDirection]}) == OK) {
                                         continue;
                                     }
-                                } else if (Game.rooms[operationOperator.memory.targetroom] && !operationOperator.room.storage) {
+                                } else if (Game.rooms[operationOperator.targetroom.name] && !operationOperator.room.storage) {
 
                                     if (spawn.spawnCreep([MOVE, MOVE, MOVE, MOVE, CARRY, WORK, WORK, WORK, WORK], operationOperator.name, { directions: [spawnDirection]}) == OK) {
                                         continue;
@@ -181,6 +187,7 @@ export class RemoteFarming extends Operation {
                                     }
                                 } else if (containerExists && !operationOperator.room.storage) {
 
+
                                     if (spawn.spawnCreep([
                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY], operationOperator.name, { directions: [spawnDirection]}) == OK) {
@@ -189,6 +196,7 @@ export class RemoteFarming extends Operation {
                                 }
                             }
                         } else {
+                            console.log(`    Spawning: ` + operationOperator.name + ` at ` + spawn.name + ` Bumping creeps out of the way.`);
                             if (spawn.spawning.directions[0]) {
                                 let direction = spawn.spawning.directions[0];
                                 let x = spawn.pos.x;

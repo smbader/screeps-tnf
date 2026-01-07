@@ -118,10 +118,12 @@ export class RoomArcher extends Operator {
 
         const hostileStructures = room.find(FIND_STRUCTURES, {
             filter: s =>
-                (!s.structureType ||
-                    s.structureType !== STRUCTURE_CONTROLLER) &&
-                // skip protected ramparts
-                !(s.structureType === STRUCTURE_RAMPART && s.isPublic === false && s.my === false)
+                (!s.structureType || s.structureType !== STRUCTURE_CONTROLLER) &&
+                !(s.structureType === STRUCTURE_RAMPART && !s.isPublic && !s.my) &&
+                !(s.structureType == STRUCTURE_WALL || s.structureType == STRUCTURE_CONTAINER
+                    || s.structureType == STRUCTURE_PORTAL || s.structureType == STRUCTURE_ROAD) &&
+                !(s.my)
+
         });
 
         // Sort by defined priority list
@@ -259,6 +261,7 @@ export class RoomArcher extends Operator {
     }
 
     attackStructureWithRanged(creep: Creep, target: Structure): void {
+
         if (creep.pos.getRangeTo(target) <= 3) {
             const result = creep.rangedAttack(target);
             if (result === OK) {

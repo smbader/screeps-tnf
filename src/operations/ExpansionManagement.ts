@@ -10,7 +10,13 @@ export class ExpansionManagement extends Operation {
 
     operationOperators:Operator[];
     expansionRooms:any[] = [
-        //{ target: 'W4N1', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
+      { target: 'E28S1', source: 'E31N1', forcespawn: true, waypoints: [    ] },
+      { target: 'E37S1', source: 'E31N1', forcespawn: true, waypoints: [    ] },
+      { target: 'E33N5', source: 'E31N3', forcespawn: true, waypoints: [    ] },
+      { target: 'E32N4', source: 'E31N3', forcespawn: true, waypoints: [    ] },
+        //{ target: 'W1N1', source: 'W4N1', forcespawn: true, waypoints: [ { 'room': 'W4N0', 'x': 38, 'y': 5 , 'shard': 3}, { 'room': 'W1N0', 'x': 4, 'y': 12 , 'shard': 3}, { 'room': 'W1N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
+        //{ target: 'W1N3', source: 'W4N1', forcespawn: true, waypoints: [ { 'room': 'W4N0', 'x': 38, 'y': 5 , 'shard': 3}, { 'room': 'W0N0', 'x': 39, 'y': 38 , 'shard': 3}, { 'room': 'W0N0', 'x': 24, 'y': 42, 'shard': 2 }, { 'room': 'W0N0', 'x': 14, 'y': 9, 'shard': 1 }, { 'room': 'W0N3', 'x': 6, 'y': 41, 'shard': 1 }, { 'room': 'W1N3', 'x': 40, 'y': 38, 'shard': 1 } ] },
+        //{ target: 'W1N1', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W1N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W1N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
         //{ target: 'W4N1', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] }
         //{ target: 'W13S6', source: 'W19S6', forcespawn: false, waypoints: [ { 'room': 'W17S7', 'x': 27, 'y': 9 , 'shard': 0} , { 'room': 'W13S7', 'x': 27, 'y': 9 , 'shard': 0} ] }
         //{ target: 'W19S6', source: 'W13N2', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W10S0', 'x': 14, 'y': 22 , 'shard': 3}, { 'room': 'W10S0', 'x': 10, 'y': 8, 'shard': 2 }, { 'room': 'W10S0', 'x': 9, 'y': 20, 'shard': 1 }, { 'room': 'W20S6', 'x': 38, 'y': 4, 'shard': 0 }, { 'room': 'W19S6', 'x': 20, 'y': 20, 'shard': 0 } ] }
@@ -44,21 +50,21 @@ export class ExpansionManagement extends Operation {
 
             let idx = 0;
             //if (!targetRoom && expansionRoom.forcespawn) {
-            for (let i = 1; i <= 4; i++) {
-                name = 'RemoteWorker_' + expansionRoom.target + '_' + i + '_' + idx;
-                let eoperator = new RemoteWorker(name, sourceRoom, targetRoom, '', expansionRoom.waypoints);
-                this.operationOperators.push(eoperator);
-            }
+            //for (let i = 1; i <= 2; i++) {
+            //    name = 'RemoteWorker_' + expansionRoom.target + '_' + i + '_' + idx;
+            //    let eoperator = new RemoteWorker(name, sourceRoom, targetRoom, '', expansionRoom.waypoints);
+            //    this.operationOperators.push(eoperator);
+            //}
             //}// else {
-            //    for(var sourceid in targetRoom.memory.sources) {
+                for(var sourceid in targetRoom.memory.sources) {
 
-            //        for (let i = 1; i <= 2; i++) {
-            //            name = 'RemoteWorker_' + expansionRoom.target + '_' + i + '_' + idx;
-            //            let eoperator = new RemoteWorker(name, sourceRoom, targetRoom, sourceid, expansionRoom.waypoints);
-            //            this.operationOperators.push(eoperator);
-            //        }
-            //        idx++;
-            //    }
+                    for (let i = 1; i <= 4; i++) {
+                        name = 'RemoteWorker_' + expansionRoom.target + '_' + i + '_' + idx;
+                        let eoperator = new RemoteWorker(name, sourceRoom, targetRoom, sourceid, expansionRoom.waypoints);
+                        this.operationOperators.push(eoperator);
+                    }
+                    idx++;
+                }
             //}
         }
 
@@ -110,10 +116,29 @@ export class ExpansionManagement extends Operation {
                             }
 
                             if (operationOperator instanceof RemoteWorker) {
-                                if (operationOperator.room.storage &&
+                                if (operationOperator.room.storage && operationOperator.room.controller &&
                                     operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000) {
-                                    console.log(`    Spawning: ` +  operationOperator.name);
-                                    spawn.spawnCreep([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY], operationOperator.name, {directions: [spawnDirection]});
+
+                                    if (operationOperator.room.controller.level > 5) {
+                                        console.log(`    Spawning: ` +  operationOperator.name);
+                                        spawn.spawnCreep([
+                                            MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,
+                                            MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,
+                                            MOVE,MOVE,MOVE,MOVE,MOVE,
+                                            WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,
+                                            WORK,WORK,WORK,WORK,WORK,
+                                            CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,
+                                            CARRY,CARRY
+                                        ], operationOperator.name, {directions: [spawnDirection]});
+                                    } else {
+                                        console.log(`    Spawning: ` +  operationOperator.name);
+                                        spawn.spawnCreep([
+                                            MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,
+                                            WORK,WORK,
+                                            CARRY,CARRY,CARRY,CARRY,CARRY
+                                        ], operationOperator.name, {directions: [spawnDirection]});
+                                    }
+
                                     continue;
                                 }
                             }

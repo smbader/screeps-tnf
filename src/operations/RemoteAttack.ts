@@ -8,8 +8,8 @@ export class RemoteAttack extends Operation {
 
     operationOperators:Operator[];
     attackRooms:any[] = [
-        ////{ target: 'W4N1', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
-        { target: 'W4N2', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3}, { 'room': 'W4N2', 'x': 2, 'y': 48 , 'shard': 3} ] }
+        { target: 'W4N2', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
+        ////{ target: 'W4N2', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3}, { 'room': 'W4N2', 'x': 2, 'y': 48 , 'shard': 3} ] }
     ];
 
     constructor() {

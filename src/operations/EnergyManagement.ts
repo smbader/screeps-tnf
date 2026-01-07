@@ -1,4 +1,3 @@
-import {forEach} from "lodash";
 import { Operation } from "../classes/operation";
 import { Operator } from "../classes/operator";
 import { Harvester } from "../operator/Harvester";
@@ -46,6 +45,7 @@ export class EnergyManagement extends Operation {
     init() {
 
         for (var roomid in Memory.rooms) {
+
             let room = Game.rooms[roomid];
             if (!room) { continue; }
 
@@ -91,6 +91,7 @@ export class EnergyManagement extends Operation {
 
             let idx = 0;
             for(var energysource in room.memory.config.energysources) {
+                //console.log(room.name + ' Source ' + idx + ' Link: ' + room.memory.config.energysources[idx].linkpos);
 
                 let harvesterName1 = 'Harvester_' + room.name + '_' + 0 + '_' + idx;
                 operator = new Harvester(harvesterName1, room, room.memory.config.energysources[idx].id, room);
@@ -108,14 +109,24 @@ export class EnergyManagement extends Operation {
                             this.operationOperators.push(operator);
                         }
 
-                        let haulerName = 'Hauler_' + room.name + '_storage';
-                        operator = new Hauler(haulerName, room, room.memory.config.energysources[idx].id, true);
-                        this.operationOperators.push(operator);
                     }
                 }
 
                 idx++;
             }
+
+            if (room.controller.level == 4 && room.storage && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000) {
+                let haulerName = 'Hauler_' + room.name + '_controller';
+                operator = new Hauler(haulerName, room, room.storage.id, false, true);
+                this.operationOperators.push(operator);
+            }
+
+            if (room.controller.level < 5 && room.storage && room.memory.config.energysources.length > 0) {
+                let haulerName = 'Hauler_' + room.name + '_storage';
+                operator = new Hauler(haulerName, room, room.memory.config.energysources[0].id, true);
+                this.operationOperators.push(operator);
+            }
+
 
         }
 
@@ -132,7 +143,6 @@ export class EnergyManagement extends Operation {
             if (creepOperator) {
                 //console.log(`    Clocking in: ` +  operationOperator.name + ' (' + creepOperator.ticksToLive  + ')');
             } else {
-
                 // Spawn him.
                 let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
 
@@ -152,6 +162,7 @@ export class EnergyManagement extends Operation {
                             controllerLevel = spawn.room.controller.level;
                         }
                         if (controllerLevel <=3) { continue; }
+                        if (controllerLevel > 8 && spawn.room.storage && spawn.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 800000) { continue; }
                         if (holding) { continue; }
                         if (!spawn.spawning) {
 

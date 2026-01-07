@@ -48,8 +48,8 @@ export class EmergencyServices extends Operation {
                 // 3 for each parking spot, pull, travel, offloading
                 // there should be max limit because of the source regen
                 let perSource = 1;
-                if (room.controller?.level <= 4) {
-                    perSource = 3;
+                if (room.controller?.level <= 3 || ((room.controller?.level == 4) && !room.storage)) {
+                    perSource = 2;
                 }
 
                 for (let i = 1; i <= (parkingSpaces * perSource); i++) {

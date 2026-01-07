@@ -1,4 +1,3 @@
-import {filter} from "lodash";
 import {Operator} from "../classes/operator";
 
 import {MapHelper} from "../utils/MapHelper";
@@ -29,8 +28,9 @@ export class Hauler extends Operator {
 
     creep: HaulerCreep | null;
     isStorage: Boolean;
+    isController: Boolean;
 
-    constructor(name: string, room: Room, sourceid: string, isStorage: boolean) {
+    constructor(name: string, room: Room, sourceid: string, isStorage: boolean, isController: boolean = false) {
         super(name, room);
 
         this.memory = {};
@@ -45,6 +45,7 @@ export class Hauler extends Operator {
         }
         this.room = room;
         this.isStorage = isStorage;
+        this.isController = isController;
     }
 
     actions() {
@@ -60,6 +61,34 @@ export class Hauler extends Operator {
             this.creep.memory.working = true;
             this.creep.memory.targetResources = null;
             this.creep.memory.targetContainer = null;
+        }
+
+
+        if (this.isController) {
+
+            if (this.room.storage) {
+                if (this.creep.memory.working == null || this.creep.memory.working == true) {
+                    if (this.creep.withdraw(this.room.storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
+                        this.creep.travelTo(this.room.storage.pos);
+                        this.creep.say('🚚');
+                        return;
+                    } else {
+                        this.creep.say('🏗️');
+                        return;
+                    }
+                } else {
+
+                    if (this.room.controller && this.creep.pos.getRangeTo(this.room.controller) > 3) {
+                        this.creep.travelTo(this.room.controller.pos);
+                        this.creep.say('⚡');
+                        return;
+                    } else {
+                        this.creep.say('🔋');
+                        return;
+                    }
+                }
+            }
+            return;
         }
 
         // While you're harvesting continue until you're full.
@@ -256,13 +285,35 @@ export class Hauler extends Operator {
             })[0];
 
             // If remote hauler, go to storage
-            if ((this.creep.name.startsWith('RemoteHauler') && storage) || this.isStorage) {
+            if (
+                (this.creep.name.startsWith('RemoteHauler') &&
+                    storage &&
+                    (storage.store.getUsedCapacity(RESOURCE_ENERGY) < 20000 || this.creep.room.controller?.level == 8) )
+                    || this.isStorage) {
                 this.creep.say(this.creep.name);
                 if (this.creep.transfer(storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
                     this.creep.travelTo(storage.pos);
                     this.creep.say('175');
-                    return;
                 }
+                return;
+            } else if (this.creep.name.startsWith('RemoteHauler')) {
+                // Find the nearest empty extension           or spawn
+                const closestEmpty = MapHelper.getClosestEmpty(this.creep);
+                if (closestEmpty) {
+                    if (this.creep.transfer(closestEmpty, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
+                        this.creep.travelTo(closestEmpty.pos);
+                        this.creep.say('195');
+                    }
+                } else {
+                    // Go to storage if no empty found
+                    if (storage) {
+                        if (this.creep.transfer(storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
+                            this.creep.travelTo(storage.pos);
+                            this.creep.say('200');
+                        }
+                    }
+                }
+                return;
             }
 
             if (this.creep.store.getUsedCapacity(RESOURCE_ENERGY) != this.creep.store.getUsedCapacity()) {
