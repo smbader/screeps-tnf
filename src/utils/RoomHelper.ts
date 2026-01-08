@@ -72,6 +72,13 @@ function loadRoomConfig(roomName: string, configClass: RoomConfigClass, needsDat
 
 export var RoomHelper = {
   loadRoomMemory: function() {
+    // First, load configuration for all explicitly configured rooms
+    for (const roomEntry of ROOMS) {
+      loadRoomConfig(roomEntry.name, roomEntry.config, roomEntry.needsData);
+    }
+
+    // Then, initialize data for any other owned rooms not in the explicit list
+    const configuredRoomNames = new Set(ROOMS.map(r => r.name));
     for (var roomid in Memory.rooms) {
       let room = Game.rooms[roomid];
       if (!room) {
@@ -83,13 +90,10 @@ export var RoomHelper = {
       if (!room.memory.config || room.memory.config.type !== "owned") {
         continue;
       }
-      // Initialize room data and labs if needed
-      initializeRoomData(room);
-    }
-
-    // Load configuration for all rooms using the rooms array
-    for (const roomEntry of ROOMS) {
-      loadRoomConfig(roomEntry.name, roomEntry.config, roomEntry.needsData);
+      // Only initialize if not already handled by the ROOMS array
+      if (!configuredRoomNames.has(roomid)) {
+        initializeRoomData(room);
+      }
     }
 
     /*
