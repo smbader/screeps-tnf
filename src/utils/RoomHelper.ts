@@ -1,193 +1,91 @@
+import { E28S1 } from "../roomconfigs/E28S1";
 import { E31N1 } from "../roomconfigs/E31N1";
 import { E31N2 } from "../roomconfigs/E31N2";
 import { E31N3 } from "../roomconfigs/E31N3";
 import { E31N4 } from "../roomconfigs/E31N4";
 import { E32N3 } from "../roomconfigs/E32N3";
 import { E32N4 } from "../roomconfigs/E32N4";
-import { E28S1 } from "../roomconfigs/E28S1";
-import { E37S1 } from "../roomconfigs/E37S1";
 import { E33N5 } from "../roomconfigs/E33N5";
+import { E37S1 } from "../roomconfigs/E37S1";
+
+// Room configuration array - defines all rooms and their setup requirements
+const ROOMS = [
+  // Rooms with full initialization (config + data + nextTrade)
+  { name: "E31N1", config: E31N1, needsData: true },
+  { name: "E31N3", config: E31N3, needsData: true },
+  { name: "E28S1", config: E28S1, needsData: true },
+  { name: "E37S1", config: E37S1, needsData: true },
+  { name: "E33N5", config: E33N5, needsData: true },
+  { name: "E32N4", config: E32N4, needsData: true },
+  // Rooms with config only
+  { name: "E31N2", config: E31N2, needsData: false },
+  { name: "E32N3", config: E32N3, needsData: false },
+  { name: "E31N4", config: E31N4, needsData: false }
+];
+
+// Helper function to initialize room data with default values
+function initializeRoomData(room: Room): void {
+  if (!room.memory.data) {
+    room.memory.data = {
+      storagelinkcommand: "",
+      storagelinktarget: null,
+      terminal: {
+        energy: 0
+      },
+      labs: {
+        reagents: [],
+        products: [],
+        boosts: []
+      }
+    };
+  }
+  if (!room.memory.nextTrade) {
+    room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
+  }
+}
+
+// Helper function to load room configuration
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadRoomConfig(roomName: string, configClass: any, needsData: boolean): void {
+  if (Game.rooms[roomName]) {
+    const roomConfig = configClass.getConfig();
+    const room = Game.rooms[roomName];
+    room.memory.config = roomConfig;
+
+    if (needsData) {
+      initializeRoomData(room);
+    }
+  }
+}
 
 export var RoomHelper = {
+  loadRoomMemory: function() {
+    for (var roomid in Memory.rooms) {
+      let room = Game.rooms[roomid];
+      if (!room) {
+        continue;
+      }
+      if (room.controller?.owner?.username != "ricane") {
+        continue;
+      }
+      if (!room.memory.config || room.memory.config.type !== "owned") {
+        continue;
+      }
+      if (!room.memory.data.labs) {
+        room.memory.data.labs = {
+          reagents: [],
+          products: [],
+          boosts: []
+        };
+      }
+    }
 
-    loadRoomMemory: function() {
+    // Load configuration for all rooms using the rooms array
+    for (const roomEntry of ROOMS) {
+      loadRoomConfig(roomEntry.name, roomEntry.config, roomEntry.needsData);
+    }
 
-
-        for (var roomid in Memory.rooms) {
-
-            let room = Game.rooms[roomid];
-            if (!room) {
-                continue;
-            }
-            if (room.controller?.owner?.username != 'ricane') {
-                continue;
-            }
-            if (!room.memory.config || room.memory.config.type !== 'owned') {
-                continue;
-            }
-            if (!room.memory.data.labs) {
-                room.memory.data.labs = {
-                    reagents: [],
-                    products: [],
-                    boosts: []
-                };
-            }
-        }
-
-        if (Game.rooms['E31N1']) {
-            let dataE31N1 = E31N1.getConfig();
-            let room = Game.rooms['E31N1'];
-            room.memory.config = dataE31N1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['E31N3']) {
-            let dataE31N3 = E31N3.getConfig();
-            let room = Game.rooms['E31N3'];
-            room.memory.config = dataE31N3;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['E28S1']) {
-            let dataE28S1 = E28S1.getConfig();
-            let room = Game.rooms['E28S1'];
-            room.memory.config = dataE28S1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['E37S1']) {
-            let dataE37S1 = E37S1.getConfig();
-            let room = Game.rooms['E37S1'];
-            room.memory.config = dataE37S1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['E33N5']) {
-            let dataE33N5 = E33N5.getConfig();
-            let room = Game.rooms['E33N5'];
-            room.memory.config = dataE33N5;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['E32N4']) {
-            let dataE32N4 = E32N4.getConfig();
-            let room = Game.rooms['E32N4'];
-            room.memory.config = dataE32N4;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['E31N2']) {
-            let dataE31N2 = E31N2.getConfig();
-            Game.rooms['E31N2'].memory.config = dataE31N2;
-        }
-
-        if (Game.rooms['E32N3']) {
-            let dataE32N3 = E32N3.getConfig();
-            Game.rooms['E32N3'].memory.config = dataE32N3;
-        }
-
-        if (Game.rooms['E31N4']) {
-            let dataE31N4 = E31N4.getConfig();
-            Game.rooms['E31N4'].memory.config = dataE31N4;
-        }
-
-        /*
+    /*
         if (Game.rooms['W1N3']) {
             let dataW1N3 = W1N3.getConfig();
             let room = Game.rooms['W1N3'];
@@ -559,7 +457,6 @@ export var RoomHelper = {
         }
     */
 
-
-        return;
-    }
-}
+    return;
+  }
+};
