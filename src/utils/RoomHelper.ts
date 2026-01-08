@@ -44,8 +44,8 @@ function initializeRoomData(room: Room): void {
         boosts: []
       }
     };
-  }
-  if (!room.memory.data.labs) {
+  } else if (!room.memory.data.labs) {
+    // Initialize labs if data exists but labs don't
     room.memory.data.labs = {
       reagents: [],
       products: [],
@@ -79,12 +79,12 @@ export var RoomHelper = {
 
     // Then, initialize data for any other owned rooms not in the explicit list
     const configuredRoomNames = new Set(ROOMS.map(r => r.name));
-    for (var roomid in Memory.rooms) {
+    for (let roomid in Memory.rooms) {
       let room = Game.rooms[roomid];
       if (!room) {
         continue;
       }
-      if (room.controller?.owner?.username != "ricane") {
+      if (room.controller?.owner?.username !== "ricane") {
         continue;
       }
       if (!room.memory.config || room.memory.config.type !== "owned") {
