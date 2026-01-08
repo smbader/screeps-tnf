@@ -71,7 +71,20 @@ export var RoomHelper = {
       if (!room.memory.config || room.memory.config.type !== "owned") {
         continue;
       }
-      if (!room.memory.data.labs) {
+      if (!room.memory.data) {
+        room.memory.data = {
+          storagelinkcommand: "",
+          storagelinktarget: null,
+          terminal: {
+            energy: 0
+          },
+          labs: {
+            reagents: [],
+            products: [],
+            boosts: []
+          }
+        };
+      } else if (!room.memory.data.labs) {
         room.memory.data.labs = {
           reagents: [],
           products: [],
