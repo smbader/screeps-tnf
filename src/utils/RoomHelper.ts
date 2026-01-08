@@ -8,6 +8,12 @@ import { E32N4 } from "../roomconfigs/E32N4";
 import { E33N5 } from "../roomconfigs/E33N5";
 import { E37S1 } from "../roomconfigs/E37S1";
 
+// Interface for room config classes
+interface RoomConfigClass {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getConfig(): any;
+}
+
 // Room configuration array - defines all rooms and their setup requirements
 const ROOMS = [
   // Rooms with full initialization (config + data + nextTrade)
@@ -39,14 +45,20 @@ function initializeRoomData(room: Room): void {
       }
     };
   }
+  if (!room.memory.data.labs) {
+    room.memory.data.labs = {
+      reagents: [],
+      products: [],
+      boosts: []
+    };
+  }
   if (!room.memory.nextTrade) {
     room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
   }
 }
 
 // Helper function to load room configuration
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function loadRoomConfig(roomName: string, configClass: any, needsData: boolean): void {
+function loadRoomConfig(roomName: string, configClass: RoomConfigClass, needsData: boolean): void {
   if (Game.rooms[roomName]) {
     const roomConfig = configClass.getConfig();
     const room = Game.rooms[roomName];
@@ -71,26 +83,8 @@ export var RoomHelper = {
       if (!room.memory.config || room.memory.config.type !== "owned") {
         continue;
       }
-      if (!room.memory.data) {
-        room.memory.data = {
-          storagelinkcommand: "",
-          storagelinktarget: null,
-          terminal: {
-            energy: 0
-          },
-          labs: {
-            reagents: [],
-            products: [],
-            boosts: []
-          }
-        };
-      } else if (!room.memory.data.labs) {
-        room.memory.data.labs = {
-          reagents: [],
-          products: [],
-          boosts: []
-        };
-      }
+      // Initialize room data and labs if needed
+      initializeRoomData(room);
     }
 
     // Load configuration for all rooms using the rooms array
