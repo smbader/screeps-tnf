@@ -1,7 +1,6 @@
-import {forEach} from "lodash";
 import { Operation } from "../classes/operation";
-import { Operator } from "../classes/operator";
 import { DemoCrew } from "../operator/DemoCrew";
+import { RoomHelper } from "../utils/RoomHelper";
 
 export class RemoteDeconstruction extends Operation {
     public operationOperators: DemoCrew[];
@@ -31,9 +30,6 @@ export class RemoteDeconstruction extends Operation {
 
 
         for (var demoTarget of this.targetDeconstruction) {
-            let sourceRoom = Game.rooms[demoTarget.room];
-            let targetRoom = Game.rooms[demoTarget.targetroom];
-
             const room = Game.rooms[demoTarget.room];
 
             // What kind of room are we looking at?
@@ -41,14 +37,15 @@ export class RemoteDeconstruction extends Operation {
                 continue;
             } else { }
 
-            if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
+            const cfg = RoomHelper.getRoomConfig(room);
+            if (cfg.shard && cfg.shard != Game.shard.name) {
                 continue;
             }
             // To be productive, we need a spawn
             const spawns = room.find(FIND_MY_SPAWNS);
 
             if (spawns.length === 0) {
-                continue;
+                // no spawns
             } else {
                 for (const spawn of spawns) {
                     // Nothing yet.
@@ -80,13 +77,14 @@ export class RemoteDeconstruction extends Operation {
                 const spawns = operationOperator.room.find(FIND_MY_SPAWNS);
 
                 if (spawns.length === 0) {
-                    continue;
+                    // no spawns
                 } else {
                     for (const spawn of spawns) {
-                        let spawnDirection = LEFT;
-                        for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+                        let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                        const cfg = RoomHelper.getRoomConfig(operationOperator.room);
+                        for (let spawnconfig of (cfg && cfg.spawns || [])) {
                             if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                spawnDirection = spawnconfig.direction;
+                                if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                             }
                         }
 
@@ -96,14 +94,12 @@ export class RemoteDeconstruction extends Operation {
                             operatorParts.push(WORK);
                             operatorParts.push(MOVE);
                         }
-                        if (spawn.spawnCreep(operatorParts, operationOperator.name, {directions: [spawnDirection]}) == OK) {
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
-    }
+                        spawn.spawnCreep(operatorParts, operationOperator.name, {directions: spawnDirection});
+                     }
+                 }
+             }
+         }
+     }
 
     public actions() {
 

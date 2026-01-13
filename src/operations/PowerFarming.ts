@@ -4,6 +4,7 @@ import { PowerFighter } from "../operator/PowerFighter";
 import { PowerHauler } from "../operator/PowerHauler";
 import { Scout } from "../operator/Scout";
 import { PowerHealer } from "../operator/PowerHealer";
+import { RoomHelper } from "../utils/RoomHelper";
 
 
 export class PowerFarming extends Operation {
@@ -11,8 +12,6 @@ export class PowerFarming extends Operation {
     operationOperators:Operator[];
     powerRooms:any[] = [
         { target: 'W13S0', source: 'W13N2', 'shard': 'shard3' },
-        //{ target: 'W13N0', source: 'W13N2', 'shard': 'shard3' },
-        //{ target: 'W14N0', source: 'W13N2', 'shard': 'shard3' },
     ];
 
     constructor() {
@@ -74,7 +73,7 @@ export class PowerFarming extends Operation {
             var creepOperator = Game.creeps[operationOperator.name];
 
             if (creepOperator) {
-                //console.log(`    Clocking in: ` + operationOperator.name + ' (' + creepOperator.ticksToLive + ')');
+                // alive
             } else {
 
                 // Spawn him.
@@ -82,20 +81,20 @@ export class PowerFarming extends Operation {
                 if (spawns.length == 0) {
                     continue;
                 } else {
+                    const cfg = RoomHelper.getRoomConfig(operationOperator.room);
                     for (let spawn of spawns) {
                         if (!spawn.spawning) {
-                            let spawnDirection = LEFT;
-                            for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+                            let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                            for (let spawnconfig of (cfg && cfg.spawns || [])) {
                                 if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                    spawnDirection = spawnconfig.direction;
+                                    if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                                 }
                             }
 
                             if (operationOperator instanceof Scout) {
                                 console.log(`    Spawning: ` + operationOperator.name);
-                                spawn.spawnCreep([MOVE], operationOperator.name, {directions: [spawnDirection]});
+                                spawn.spawnCreep([MOVE], operationOperator.name, {directions: spawnDirection});
                             }
-
 
                             if (operationOperator instanceof PowerFighter) {
                                 if (operationOperator.room.storage &&
@@ -138,57 +137,21 @@ export class PowerFarming extends Operation {
 
                                         let ps = target[0];
                                         if (ps.hits > 0) {
-
-                                            if (spawn.spawnCreep(
-                                                [MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL], operationOperator.name, {directions: [spawnDirection]}) == OK) {
-                                                continue;
-                                            }
+                                            let result = spawn.spawnCreep([
+                                                HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE
+                                            ], operationOperator.name, {directions: [spawnDirection]});
+                                            if (result == OK) continue;
+                                            else console.log('cant spawn healer ' + result);
                                         }
                                     }
 
                                 }
                             }
 
-                            if (operationOperator instanceof PowerHauler) {
-                                if (operationOperator.room.storage &&
-                                    operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 100000) {
-
-
-                                    let targetRoom = Game.rooms[operationOperator.targetroom];
-                                    let target = targetRoom.find<StructurePowerBank>(FIND_STRUCTURES, {
-                                        filter: structure => (structure.structureType == STRUCTURE_POWER_BANK)
-                                    });
-
-                                    if (target.length > 0) {
-                                        let ps = target[0];
-                                        if (ps.hits < 250000 && ps.power > 0) {
-
-                                            if (spawn.spawnCreep([MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY], operationOperator.name, {directions: [spawnDirection]}) == OK) {
-                                                continue;
-                                            }
-
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
             }
         }
     }
-
-    actions() {
-
-        //console.log(`--------  Remote Farming Actions  ------`);
-        for (let operationOperator of this.operationOperators) {
-            let cpuStart = Game.cpu.getUsed();
-            operationOperator.actions();
-            let cpuUsed = Game.cpu.getUsed() - cpuStart;
-            if (cpuUsed > 0.5) {
-                //console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
-            }
-        }
-    }
-
 }

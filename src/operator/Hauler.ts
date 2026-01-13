@@ -1,6 +1,7 @@
 import {Operator} from "../classes/operator";
 
 import {MapHelper} from "../utils/MapHelper";
+import { RoomHelper } from "../utils/RoomHelper";
 type GSResourceTypes = "energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence";
 
 
@@ -92,7 +93,7 @@ export class Hauler extends Operator {
         }
 
         // While you're harvesting continue until you're full.
-        if (this.creep.memory.working == null || this.creep.memory.working == true) {
+        if (this.creep.memory.working !== false) {
 
             if (this.creep.memory.targetResources != null) {
                 const target = Game.getObjectById(this.creep.memory.targetResources);
@@ -168,8 +169,9 @@ export class Hauler extends Operator {
                 for (let container of containers) {
 
                     let notThisContainer = false;
-                    if (this.creep.room.memory.config.fieldContainers) {
-                        for (const fc of this.creep.room.memory.config.fieldContainers) {
+                    const roomCfg = RoomHelper.getRoomConfig(this.room);
+                    if (roomCfg.fieldContainers) {
+                        for (const fc of roomCfg.fieldContainers) {
                             if (container.pos.x == fc.x && container.pos.y == fc.y ) {
                                 notThisContainer = true;
                             }
@@ -271,7 +273,8 @@ export class Hauler extends Operator {
             }
         } else {
 
-            if (!this.room.memory.config) {
+            const roomCfg = RoomHelper.getRoomConfig(this.room);
+            if (!roomCfg) {
                 if (this.room.controller && this.room.controller.pos.getRangeTo(this.creep) > 3) {
                     this.creep.travelTo(this.room.controller.pos);
                     this.creep.say('🏭');
@@ -327,8 +330,9 @@ export class Hauler extends Operator {
                 }
             }
 
-            let storagelinkpos = this.room.memory.config.storagelink;
-            let controllerLinkpos = this.room.memory.config.controllerLink;
+            const roomCfg2 = RoomHelper.getRoomConfig(this.room);
+            let storagelinkpos = roomCfg2.storagelink;
+            let controllerLinkpos = roomCfg2.controllerLink;
 
             var storagelink = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
                 filter: (structure) => {

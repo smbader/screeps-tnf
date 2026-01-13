@@ -7,6 +7,7 @@ import { E32N3 } from "../roomconfigs/E32N3";
 import { E32N4 } from "../roomconfigs/E32N4";
 import { E33N5 } from "../roomconfigs/E33N5";
 import { E37S1 } from "../roomconfigs/E37S1";
+import { ricaneroom } from "./ricaneroom";
 
 // Interface for room config classes
 interface RoomConfigClass {
@@ -70,7 +71,186 @@ function loadRoomConfig(roomName: string, configClass: RoomConfigClass, needsDat
   }
 }
 
+// Utility: rotate a template-relative position (assumed in 0..11 space) around the 12x12 square
+function rotateAndTranslate(pos: { x: number; y: number }, anchor: { x: number; y: number }, rotation: number): { x: number; y: number } {
+  // Normalize rotation to 0-3 (multiples of 90 degrees clockwise)
+  const r = ((rotation % 4) + 4) % 4;
+  // Template grid size (0..11)
+  const N = 11;
+  let rx = 0;
+  let ry = 0;
+  switch (r) {
+    case 0:
+      rx = pos.x;
+      ry = pos.y;
+      break;
+    case 1:
+      rx = pos.y;
+      ry = N - pos.x;
+      break;
+    case 2:
+      rx = N - pos.x;
+      ry = N - pos.y;
+      break;
+    case 3:
+      rx = N - pos.y;
+      ry = pos.x;
+      break;
+  }
+  return { x: anchor.x + rx, y: anchor.y + ry };
+}
+
+// Map a template config (as returned by ricaneroom.getConfig()) into absolute room coordinates
+function mapTemplateConfig(templateConfig: any, anchor: { x: number; y: number }, rotation: number): any {
+  const mapped: any = {};
+
+  for (const key in templateConfig) {
+    const value = templateConfig[key];
+    if (value == null) continue;
+
+    // Single-position objects
+    if (value.x !== undefined && value.y !== undefined) {
+      mapped[key] = rotateAndTranslate(value, anchor, rotation);
+      continue;
+    }
+
+    // Arrays of positions
+    if (Array.isArray(value)) {
+      mapped[key] = value.map((entry: any) => {
+        if (entry.x !== undefined && entry.y !== undefined) {
+          return rotateAndTranslate(entry, anchor, rotation);
+        }
+        return entry;
+      });
+      continue;
+    }
+
+    // Nested objects (fields etc)
+    if (typeof value === 'object') {
+      mapped[key] = {};
+      for (const subkey in value) {
+        const subvalue = value[subkey];
+        if (subvalue == null) continue;
+        if (subvalue.x !== undefined && subvalue.y !== undefined) {
+          mapped[key][subkey] = rotateAndTranslate(subvalue, anchor, rotation);
+        } else if (Array.isArray(subvalue)) {
+          mapped[key][subkey] = subvalue.map((entry: any) => {
+            if (entry.x !== undefined && entry.y !== undefined) return rotateAndTranslate(entry, anchor, rotation);
+            return entry;
+          });
+        } else {
+          mapped[key][subkey] = subvalue;
+        }
+      }
+      continue;
+    }
+
+    // Fallback - copy as-is
+    mapped[key] = value;
+  }
+
+  return mapped;
+}
+
+// Build energysources array for rooms that don't have explicit energysources in their config
+function buildEnergySourcesForRoom(room: Room): any[] {
+  const sources: Source[] = room.find(FIND_SOURCES);
+  const energysources: any[] = [];
+
+  for (const s of sources) {
+    const entry: any = {
+      id: s.id,
+      pos: { x: s.pos.x, y: s.pos.y },
+      haulers: 1
+    };
+
+    // If room.memory.sources has container info, use that for parking
+    if (room.memory.sources && room.memory.sources[s.id]) {
+      const cont = room.memory.sources[s.id].container;
+      if (cont) {
+        entry.parkingspots = [ { x: cont.x, y: cont.y } ];
+        // Try to find a link near the container
+        const link = room.find<StructureLink>(FIND_STRUCTURES, {
+          filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(cont.x, cont.y) < 4
+        })[0];
+        if (link) {
+          entry.linkpos = { x: link.pos.x, y: link.pos.y };
+        }
+      }
+    } else {
+      // fallback: create one parking spot adjacent to source
+      const px = Math.max(1, Math.min(48, s.pos.x + 1));
+      const py = Math.max(1, Math.min(48, s.pos.y));
+      entry.parkingspots = [{ x: px, y: py }];
+      // try to find a nearby link
+      const link = room.find<StructureLink>(FIND_STRUCTURES, {
+        filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(s.pos) < 4
+      })[0];
+      if (link) entry.linkpos = { x: link.pos.x, y: link.pos.y };
+    }
+
+    energysources.push(entry);
+  }
+
+  return energysources;
+}
+
+// Resolve a room's config: if the room uses a template, translate template coords into absolute positions
+function resolveTemplateConfig(room: Room): any {
+  if (!room || !room.memory || !room.memory.config) return null;
+  const memcfg = room.memory.config;
+  if (!memcfg.roomtemplate) return memcfg;
+
+  const templateName = memcfg.roomtemplate;
+  const anchor = memcfg.roomanchor || { x: 0, y: 0 };
+  const rotation = memcfg.templaterotation || 0;
+
+  // Only 'ricane' template supported for now
+  let templateConfig: any = null;
+  if (templateName === 'ricane') {
+    templateConfig = ricaneroom.getConfig();
+  } else {
+    // Unknown template - return the raw memory config so at least template metadata is preserved
+    return memcfg;
+  }
+
+  const mapped = mapTemplateConfig(templateConfig, anchor, rotation);
+
+  // Merge - memory config keys should override template defaults
+  const merged: any = Object.assign({}, mapped, memcfg);
+
+  // If energysources aren't provided by the memory config, build them from actual room sources
+  if (!merged.energysources) {
+    merged.energysources = buildEnergySourcesForRoom(room);
+  }
+
+  // If spawns aren't present, ensure mapped spawns exist
+  if (!merged.spawns && mapped.spawns) merged.spawns = mapped.spawns;
+
+  // Ensure storagelink/controllerLink/fieldContainers/fieldLinks/chemist are present from template where missing
+  if (!merged.storagelink && mapped.storagelink) merged.storagelink = mapped.storagelink;
+  if (!merged.fieldContainers && mapped.fieldContainers) merged.fieldContainers = mapped.fieldContainers;
+  if (!merged.fieldLinks && mapped.fieldLinks) merged.fieldLinks = mapped.fieldLinks;
+  if (!merged.chemist && mapped.chemist) merged.chemist = mapped.chemist;
+
+  // controllerLink isn't explicitly in template; if absent try using first fieldLink as controllerLink
+  if (!merged.controllerLink && merged.fieldLinks && merged.fieldLinks.length > 0) {
+    merged.controllerLink = merged.fieldLinks[0];
+  }
+
+  // Also map field-specific entries (field0, field2 etc) from template if present and missing
+  for (const key in mapped) {
+    if (key.startsWith('field') && !merged[key]) {
+      merged[key] = mapped[key];
+    }
+  }
+
+  return merged;
+}
+
 export var RoomHelper = {
+
+
   loadRoomMemory: function() {
     // First, load configuration for all explicitly configured rooms
     for (const roomEntry of ROOMS) {
@@ -90,384 +270,84 @@ export var RoomHelper = {
       if (!room.memory.config || room.memory.config.type !== "owned") {
         continue;
       }
+      // If config uses a template, resolve template positions into concrete coords
+      if (room.memory.config.roomtemplate) {
+        const resolved = resolveTemplateConfig(room);
+        if (resolved) {
+          room.memory.config = resolved;
+        }
+      }
       // Only initialize if not already handled by the ROOMS array
       if (!configuredRoomNames.has(roomid)) {
         initializeRoomData(room);
       }
     }
 
-    /*
-        if (Game.rooms['W1N3']) {
-            let dataW1N3 = W1N3.getConfig();
-            let room = Game.rooms['W1N3'];
-            room.memory.config = dataW1N3;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-
-        if (Game.rooms['W1N1']) {
-            let dataW1N1 = W1N1.getConfig();
-            let room = Game.rooms['W1N1'];
-            room.memory.config = dataW1N1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W18S9']) {
-            let dataW18S9 = W18S9.getConfig();
-            let room = Game.rooms['W18S9'];
-            room.memory.config = dataW18S9;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W19S9']) {
-            let dataW19S9 = W19S9.getConfig();
-            let room = Game.rooms['W19S9'];
-            room.memory.config = dataW19S9;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W13N2']) {
-            let dataW13N2 = W13N2.getConfig();
-            let room = Game.rooms['W13N2'];
-            room.memory.config = dataW13N2;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W18N2']) {
-            let dataW18N2 = W18N2.getConfig();
-            let room = Game.rooms['W18N2'];
-            room.memory.config = dataW18N2;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-        if (Game.rooms['W19N2']) {
-            let dataW19N2 = W19N2.getConfig();
-            let room = Game.rooms['W19N2'];
-            room.memory.config = dataW19N2;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-        if (Game.rooms['W15N3']) {
-            let dataW15N3 = W15N3.getConfig();
-            let room = Game.rooms['W15N3'];
-            room.memory.config = dataW15N3;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-        if (Game.rooms['W13N1']) {
-            let dataW13N1 = W13N1.getConfig();
-            let room = Game.rooms['W13N1'];
-            room.memory.config = dataW13N1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-        if (Game.rooms['W17S1']) {
-            let dataW17S1 = W17S1.getConfig();
-            let room = Game.rooms['W17S1'];
-            room.memory.config = dataW17S1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-        if (Game.rooms['W19S6']) {
-            let dataW19S6 = W19S6.getConfig();
-            let room = Game.rooms['W19S6'];
-            room.memory.config = dataW19S6;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-        if (Game.rooms['W18S5']) {
-            let dataW18S5 = W18S5.getConfig();
-            let room = Game.rooms['W18S5'];
-            room.memory.config = dataW18S5;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W18S13']) {
-            let dataW18S13 = W18S13.getConfig();
-            let room = Game.rooms['W18S13'];
-            room.memory.config = dataW18S13;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W13S6']) {
-            let dataW13S6 = W13S6.getConfig();
-            let room = Game.rooms['W13S6'];
-            room.memory.config = dataW13S6;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        if (Game.rooms['W4N1']) {
-            let dataW4N1 = W4N1.getConfig();
-            let room = Game.rooms['W4N1'];
-            room.memory.config = dataW4N1;
-            if (!room.memory.data) {
-                room.memory.data = {
-                    storagelinkcommand: '',
-                    storagelinktarget: null,
-                    terminal: {
-                        energy: 0
-                    },
-                    labs: {
-                        reagents: [],
-                        products: [],
-                        boosts: [],
-                    }
-                };
-            }
-            if (!room.memory.nextTrade) {
-                room.memory.nextTrade = Game.time + Math.floor(Math.random() * 100);
-            }
-        }
-
-        let dataW6N33 = W6N33.getConfig();
-        Game.rooms['W6N33'].memory.config = dataW6N33;
-
-        if (Game.rooms['W7N33']) {
-            let dataW7N33 = W7N33.getConfig();
-            Game.rooms['W7N33'].memory.config = dataW7N33;
-        }
-
-        if (Game.rooms['W8N33']) {
-            let dataW8N33 = W8N33.getConfig();
-            Game.rooms['W8N33'].memory.config = dataW8N33;
-        }
-
-        if (Game.rooms['W3N1']) {
-            let dataW3N1 = W3N1.getConfig();
-            Game.rooms['W3N1'].memory.config = dataW3N1;
-        }
-        if (Game.rooms['W17S13']) {
-            let dataW17S13 = W17S13.getConfig();
-            Game.rooms['W17S13'].memory.config = dataW17S13;
-        }
-        if (Game.rooms['W18S6']) {
-            let dataW18S6 = W18S6.getConfig();
-            Game.rooms['W18S6'].memory.config = dataW18S6;
-        }
-        if (Game.rooms['W15N4']) {
-            let dataW15N4 = W15N4.getConfig();
-            Game.rooms['W15N4'].memory.config = dataW15N4;
-        }
-    */
-
     return;
+  },
+
+  // Returns the resolved configuration for a room without modifying memory
+  getRoomValues: function(room: Room) {
+    if (!room) return null;
+
+    // Load runtime values from memory first so they are available
+    const memoryValues: any = {};
+    if (room.memory) {
+      if (room.memory.nextTrade !== undefined) memoryValues.nextTrade = room.memory.nextTrade;
+      if (room.memory.data !== undefined) memoryValues.data = room.memory.data;
+      if (room.memory.starvedTime !== undefined) memoryValues.starvedTime = room.memory.starvedTime;
+      if (room.memory.sources !== undefined) memoryValues.sources = room.memory.sources;
+      if (room.memory.spawnMemory !== undefined) memoryValues.spawnMemory = room.memory.spawnMemory;
+      // Do not copy room.memory.config here - we'll resolve it below and let config fields overwrite memory values
+    }
+
+    // Start with resolved config (handles templates)
+    let cfg = null;
+    if (room.memory && room.memory.config) {
+      cfg = resolveTemplateConfig(room);
+    }
+
+    // Merge memory values first, then overlay the resolved config so config keys overwrite runtime memory values
+    let base: any = Object.assign({}, memoryValues, cfg || {});
+
+    // Ensure energysources are present
+    if (!base.energysources) {
+      base.energysources = buildEnergySourcesForRoom(room);
+    }
+
+    // Ensure spawns are represented as {x,y,direction}
+    if (!base.spawns) {
+      // Use FIND_MY_STRUCTURES with a filter to get strongly-typed spawns
+      const spawns = room.find<StructureSpawn>(FIND_MY_STRUCTURES, { filter: (s) => s.structureType === STRUCTURE_SPAWN });
+      if (spawns && spawns.length > 0) {
+        base.spawns = spawns.map(s => ({ x: s.pos.x, y: s.pos.y, direction: LEFT }));
+      }
+    }
+
+    // Ensure storagelink is present (coordinate)
+    if (!base.storagelink && room.storage) {
+      const link = room.find<StructureLink>(FIND_STRUCTURES, { filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(room.storage!.pos) < 4 })[0];
+      if (link) base.storagelink = { x: link.pos.x, y: link.pos.y };
+    }
+
+    // Ensure controllerLink is present
+    if (!base.controllerLink && room.controller) {
+      const link = room.find<StructureLink>(FIND_STRUCTURES, { filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(room.controller!.pos) < 4 })[0];
+      if (link) base.controllerLink = { x: link.pos.x, y: link.pos.y };
+    }
+
+    // Field containers/links: fall back to empty arrays if missing
+    if (!base.fieldContainers) base.fieldContainers = base.fieldContainers || [];
+    if (!base.fieldLinks) base.fieldLinks = base.fieldLinks || [];
+
+    // Chemist parking
+    if (!base.chemist && cfg && cfg.chemist) base.chemist = cfg.chemist;
+
+    return base;
+  },
+
+  // Backwards compatible alias: keep getRoomConfig but delegate to getRoomValues
+  getRoomConfig: function(room: Room) {
+    return this.getRoomValues(room);
   }
 };

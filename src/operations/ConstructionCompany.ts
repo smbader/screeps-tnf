@@ -1,7 +1,6 @@
-import {forEach} from "lodash";
 import { Operation } from "../classes/operation";
-import { Operator } from "../classes/operator";
 import { ConstructionCrew } from "../operator/ConstructionCrew";
+import { RoomHelper } from "../utils/RoomHelper";
 
 export class ConstructionCompany extends Operation {
   public operationOperators: ConstructionCrew[];
@@ -27,35 +26,36 @@ export class ConstructionCompany extends Operation {
         // Nothing Yet.
         // Find available controller parking spaces.
       }
-      if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
+      const cfgRoom = RoomHelper.getRoomConfig(room);
+      if (cfgRoom.shard && cfgRoom.shard != Game.shard.name) {
           continue;
       }
 
       // To be productive, we need a spawn
       const spawns = room.find(FIND_MY_SPAWNS);
       if (spawns.length === 0) {
-        continue;
+        // no spawns
       } else {
-        for (const spawn of spawns) {
-          // Nothing yet.
-        }
-      }
+         for (const spawn of spawns) {
+           // Nothing yet.
+         }
+       }
 
       const source = spawns[0].pos.findClosestByRange(FIND_SOURCES);
       if (!source) {
-        continue;
+        // no source
       } else {
 
-        for (let i = 0; i < 1; i++) {
-            // We need a unique name
-            const name = "Builder_" + room.name + "_" + i;
-            const operator = new ConstructionCrew(name, room, source.id, "");
+         for (let i = 0; i < 1; i++) {
+             // We need a unique name
+             const name = "Builder_" + room.name + "_" + i;
+             const operator = new ConstructionCrew(name, room, source.id, "");
 
-            this.operationOperators.push(operator);
-        }
-      }
-    }
-  }
+             this.operationOperators.push(operator);
+         }
+       }
+     }
+   }
 
   public roleCall() {
     // Let's determine if we need any spawns.
@@ -69,7 +69,8 @@ export class ConstructionCompany extends Operation {
         // Spawn him.
         const spawns = operationOperator.room.find(FIND_MY_SPAWNS);
 
-          if (!(operationOperator.room.memory.nextTrade && (operationOperator.room.memory.nextTrade - 50) < Game.time)) {
+          const cfgRoom = RoomHelper.getRoomConfig(operationOperator.room);
+          if (!(cfgRoom && cfgRoom.nextTrade && (cfgRoom.nextTrade - 50) < Game.time)) {
               continue;
           }
           if (Game.cpu.bucket < 5000) {
@@ -80,10 +81,10 @@ export class ConstructionCompany extends Operation {
           continue;
         } else {
           for (const spawn of spawns) {
-              let spawnDirection = LEFT;
-              for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+              let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+              for (let spawnconfig of (cfgRoom && cfgRoom.spawns || [])) {
                   if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                      spawnDirection = spawnconfig.direction;
+                      if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                   }
               }
 
@@ -92,7 +93,7 @@ export class ConstructionCompany extends Operation {
                 for (const constructionSite of constructionSites) {
                     totalDebt += constructionSite.progressTotal - constructionSite.progress;
                 }
-                const numBuilders = Math.floor(totalDebt / 3000);
+                // const numBuilders = Math.floor(totalDebt / 3000); // unused
 
                   let rampartsToRepair = spawn.room.find(FIND_STRUCTURES, {
                       filter: (structure) => {
@@ -110,7 +111,7 @@ export class ConstructionCompany extends Operation {
                         operatorParts.push(MOVE);
                     }
 
-                    spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]});
+                    spawn.spawnCreep(operatorParts, operationOperator.name, { directions: spawnDirection});
                 }
 
           }
@@ -130,28 +131,35 @@ export class ConstructionCompany extends Operation {
           if (room.controller?.owner?.username !== "ricane") {
               continue;
           }
-          if (room.memory.config.type != 'owned') {
+          const cfgRoom = RoomHelper.getRoomConfig(room);
+          if (!cfgRoom || cfgRoom.type != 'owned') {
+              console.log('CONSTRUCTION: Room not owned [' + room.name + ']');
               continue;
           }
-          if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
+          if (cfgRoom.shard && cfgRoom.shard != Game.shard.name) {
+              console.log('CONSTRUCTION: Wrong shard [' + room.name + ']');
               continue;
           }
           if (Game.cpu.bucket < 5000) {
+              console.log('CONSTRUCTION: Bucket is too low for eval. [' + room.name + ']');
               continue;
           }
-          if (!(room.memory.nextTrade && ((room.memory.nextTrade - Game.time) % 30 == 0))) {
+          if (!(cfgRoom.nextTrade && ((cfgRoom.nextTrade - Game.time) % 30 == 0))) {
+              console.log('CONSTRUCTION: Not time for eval (' + cfgRoom.nextTrade + ') (' + (cfgRoom.nextTrade - Game.time) % 30+ ')  [' + room.name + ']');
               continue;
           }
 
           // find total number of construction sites.
           let totalConstrctionSites = room.find(FIND_CONSTRUCTION_SITES).length;
           if (totalConstrctionSites >= 2) {
+              console.log('CONSTRUCTION: Already 2 construction sites. [' + room.name + ']');
               continue;
           }
 
-          if (totalConstrctionSites < 2 && room.memory.config.spawns) {
+          console.log('CONSTRUCTION: Checking for Spawns. [' + room.name + ']');
+          if (totalConstrctionSites < 2 && cfgRoom.spawns) {
 
-              let spawns = room.memory.config.spawns;
+              let spawns = cfgRoom.spawns;
               for (let i = 0; i < spawns.length; i++) {
                   //look for structure in this location
                   if (totalConstrctionSites < 2 &&
@@ -170,23 +178,24 @@ export class ConstructionCompany extends Operation {
               // 20 extensions
               // 1 tower
               // 1 storage
-              let towers = room.memory.config.towers;
-              let containers = room.memory.config.field0.containers;
-              if (room.memory.config.field1) {
-                  containers = containers.concat(room.memory.config.field1.containers);
+              let towers = cfgRoom.towers;
+              let containers = cfgRoom.field0.containers;
+              if (cfgRoom.field1) {
+                  containers = containers.concat(cfgRoom.field1.containers);
               }
-              if (room.memory.config.field2) {
-                  containers = containers.concat(room.memory.config.field2.containers);
+              if (cfgRoom.field2) {
+                  containers = containers.concat(cfgRoom.field2.containers);
               }
-              if (room.memory.config.field3) {
-                  containers = containers.concat(room.memory.config.field3.containers);
+              if (cfgRoom.field3) {
+                  containers = containers.concat(cfgRoom.field3.containers);
               }
-              if (room.memory.config.field4) {
-                  containers = containers.concat(room.memory.config.field4.containers);
+              if (cfgRoom.field4) {
+                  containers = containers.concat(cfgRoom.field4.containers);
               }
 
-              let storage = room.memory.config.storage;
+              let storage = cfgRoom.storage;
 
+              console.log('CONSTRUCTION: Checking for Towers. [' + room.name + ']');
               for (let i = 0; i < towers.length; i++) {
                   //look for structure in this location
                   if (totalConstrctionSites < 2 &&
@@ -199,6 +208,7 @@ export class ConstructionCompany extends Operation {
                   }
               }
 
+              console.log('CONSTRUCTION: Checking for Extensions. [' + room.name + ']');
               for (let i = 0; i < containers.length; i++) {
                 //look for structure in this location
                  if (totalConstrctionSites < 2 &&
@@ -211,6 +221,7 @@ export class ConstructionCompany extends Operation {
                  }
               }
 
+              console.log('CONSTRUCTION: Checking for Storage. [' + room.name + ']');
               if (totalConstrctionSites < 2 &&
                   room.lookForAt(LOOK_STRUCTURES,  storage.x, storage.y).length == 0 &&
                   room.lookForAt(LOOK_CONSTRUCTION_SITES,  storage.x, storage.y).length == 0) {
@@ -224,8 +235,9 @@ export class ConstructionCompany extends Operation {
           if (room.controller.level >= 5) {
               // Level 5, you can build 2 links.
 
-              let storagelink = room.memory.config.storagelink;
+              let storagelink = cfgRoom.storagelink;
 
+              console.log('CONSTRUCTION: Checking for Links. [' + room.name + ']');
               if (totalConstrctionSites < 2 &&
                   room.lookForAt(LOOK_STRUCTURES,  storagelink.x, storagelink.y).length == 0 &&
                   room.lookForAt(LOOK_CONSTRUCTION_SITES,  storagelink.x, storagelink.y).length == 0) {
@@ -234,7 +246,7 @@ export class ConstructionCompany extends Operation {
                   totalConstrctionSites++;
               }
 
-              let controllerLink = room.memory.config.controllerLink;
+              let controllerLink = cfgRoom.controllerLink;
               if (totalConstrctionSites < 2 &&
                   room.lookForAt(LOOK_STRUCTURES,  controllerLink.x, controllerLink.y).length == 0 &&
                   room.lookForAt(LOOK_CONSTRUCTION_SITES,  controllerLink.x, controllerLink.y).length == 0) {
@@ -247,122 +259,125 @@ export class ConstructionCompany extends Operation {
 
           if (room.controller.level >= 6 && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 90000) {
               // road
-              if (room.memory.config.road) {
+              console.log('CONSTRUCTION: Checking for Roads. [' + room.name + ']');
+              if (cfgRoom.road) {
                   //console.log('ROADS IN CONFIG');
-                  let roads = room.memory.config.road;
-                  for (let i = 0; i < roads.length; i++) {
-                      if (totalConstrctionSites >= 2) {
-                          continue;
-                      }
-                      if (this.attemptConstruction (room, roads[i], STRUCTURE_ROAD)) {
-                          totalConstrctionSites++;
-                      }
-                  }
-              }
-          }
+                  let roads = cfgRoom.road;
 
-          if (room.controller.level >= 8 && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 200000) {
+                   for (let i = 0; i < roads.length; i++) {
+                       if (totalConstrctionSites >= 2) {
+                           continue;
+                       }
+                       if (this.attemptConstruction (room, roads[i], STRUCTURE_ROAD)) {
+                           totalConstrctionSites++;
+                       }
+                   }
+               }
+           }
 
+           if (room.controller.level >= 8 && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 200000) {
 
+               // containers
+               console.log('CONSTRUCTION: Checking for Containers. [' + room.name + ']');
+               if (cfgRoom.containers) {
+                  let containers = cfgRoom.containers;
+                   for (let i = 0; i < containers.length; i++) {
+                       if (totalConstrctionSites >= 2) {
+                           continue;
+                       }
+                       if (this.attemptConstruction (room, containers[i], STRUCTURE_CONTAINER)) {
+                           totalConstrctionSites++;
+                       }
+                   }
+               }
 
-              // containers
-              if (room.memory.config.containers) {
-                  let containers = room.memory.config.containers;
-                  for (let i = 0; i < containers.length; i++) {
-                      if (totalConstrctionSites >= 2) {
-                          continue;
-                      }
-                      if (this.attemptConstruction (room, containers[i], STRUCTURE_CONTAINER)) {
-                          totalConstrctionSites++;
-                      }
-                  }
-              }
+               let rampartsToRepair = room.find(FIND_STRUCTURES, {
+                   filter: (structure) => {
+                       return (structure.structureType == STRUCTURE_RAMPART && structure.hits < 1000000);
+                   }
+               });
+               if (rampartsToRepair.length > 0) {
+                   continue;
+               }
 
-              let rampartsToRepair = room.find(FIND_STRUCTURES, {
-                  filter: (structure) => {
-                      return (structure.structureType == STRUCTURE_RAMPART && structure.hits < 1000000);
-                  }
-              });
-              if (rampartsToRepair.length > 0) {
-                  continue;
-              }
+               // rampart
+               console.log('CONSTRUCTION: Checking for Ramparts. [' + room.name + ']');
+               if (cfgRoom.rampart) {
+                  let ramparts = cfgRoom.rampart;
+                   for (let i = 0; i < ramparts.length; i++) {
+                       if (totalConstrctionSites >= 2) {
+                           continue;
+                       }
+                       if (this.attemptConstruction (room, ramparts[i], STRUCTURE_RAMPART)) {
+                           totalConstrctionSites++;
+                       }
+                   }
+               }
 
-              // rampart
-              if (room.memory.config.rampart) {
-                  let ramparts = room.memory.config.rampart;
-                  for (let i = 0; i < ramparts.length; i++) {
-                      if (totalConstrctionSites >= 2) {
-                          continue;
-                      }
-                      if (this.attemptConstruction (room, ramparts[i], STRUCTURE_RAMPART)) {
-                          totalConstrctionSites++;
-                      }
-                  }
-              }
+               // observer
+               console.log('CONSTRUCTION: Checking for Observer. [' + room.name + ']');
+               if (cfgRoom.observer) {
+                  let observer = cfgRoom.observer;
+                   if (totalConstrctionSites >= 2) {
+                       continue;
+                   }
+                   if (this.attemptConstruction (room, observer, STRUCTURE_OBSERVER)) {
+                       totalConstrctionSites++;
+                   }
+               }
 
-              // observer
-              if (room.memory.config.observer) {
-                  let observer = room.memory.config.observer;
-                  if (totalConstrctionSites >= 2) {
-                      continue;
-                  }
-                  if (this.attemptConstruction (room, observer, STRUCTURE_OBSERVER)) {
-                      totalConstrctionSites++;
-                  }
-              }
-
-              // lab
-              //console.log('CHECKING lab CONSTRUCTION');
-              if (room.memory.config.lab) {
-                  let labs = room.memory.config.lab;
-                  //console.log('CHECKING lab CONSTRUCTION ' + labs.length);
-                  for (let i = 0; i < labs.length; i++) {
-                      if (totalConstrctionSites >= 2) {
-                          continue;
-                      }
-                      if (this.attemptConstruction (room, labs[i], STRUCTURE_LAB)) {
-                          totalConstrctionSites++;
-                      }
-                  }
-              }
-
-
-              // nuker
-              if (room.memory.config.nuker) {
-                  let nuker = room.memory.config.nuker;
-                  if (totalConstrctionSites >= 1) {
-                      continue;
-                  }
-                  if (this.attemptConstruction (room, nuker, STRUCTURE_NUKER)) {
-                      totalConstrctionSites++;
-                  }
-
-              }
+               // lab
+               //console.log('CHECKING lab CONSTRUCTION');
+               if (cfgRoom.lab) {
+                  let labs = cfgRoom.lab;
+                   //console.log('CHECKING lab CONSTRUCTION ' + labs.length);
+                   for (let i = 0; i < labs.length; i++) {
+                       if (totalConstrctionSites >= 2) {
+                           continue;
+                       }
+                       if (this.attemptConstruction (room, labs[i], STRUCTURE_LAB)) {
+                           totalConstrctionSites++;
+                       }
+                   }
+               }
 
 
-              // powerspawn
-              if (room.memory.config.powerSpawn) {
-                  let ps = room.memory.config.powerSpawn;
-                  if (totalConstrctionSites >= 1) {
-                      continue;
-                  }
-                  if (this.attemptConstruction (room, ps, STRUCTURE_POWER_SPAWN)) {
-                      totalConstrctionSites++;
-                  }
-              }
+               // nuker
+               if (cfgRoom.nuker) {
+                  let nuker = cfgRoom.nuker;
+                   if (totalConstrctionSites >= 1) {
+                       continue;
+                   }
+                   if (this.attemptConstruction (room, nuker, STRUCTURE_NUKER)) {
+                       totalConstrctionSites++;
+                   }
 
-              // factory
-              if (room.memory.config.factory) {
-                  let factory = room.memory.config.factory;
-                  if (totalConstrctionSites >= 1) {
-                      continue;
-                  }
-                  if (this.attemptConstruction (room, factory, STRUCTURE_FACTORY)) {
-                      totalConstrctionSites++;
-                  }
-              }
+               }
 
-          }
+
+               // powerspawn
+               if (cfgRoom.powerSpawn) {
+                  let ps = cfgRoom.powerSpawn;
+                   if (totalConstrctionSites >= 1) {
+                       continue;
+                   }
+                   if (this.attemptConstruction (room, ps, STRUCTURE_POWER_SPAWN)) {
+                       totalConstrctionSites++;
+                   }
+               }
+
+               // factory
+               if (cfgRoom.factory) {
+                  let factory = cfgRoom.factory;
+                   if (totalConstrctionSites >= 1) {
+                       continue;
+                   }
+                   if (this.attemptConstruction (room, factory, STRUCTURE_FACTORY)) {
+                       totalConstrctionSites++;
+                   }
+               }
+
+           }
 
       }
 

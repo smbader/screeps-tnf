@@ -5,6 +5,7 @@ import {Hauler} from "../operator/Hauler";
 import {Scout} from "../operator/Scout";
 import {Claimer} from "../operator/Claimer";
 import {TinyFarmer} from "../operator/TinyFarmer";
+import { RoomHelper } from "../utils/RoomHelper";
 
 
 export class RemoteFarming extends Operation {
@@ -14,13 +15,6 @@ export class RemoteFarming extends Operation {
         { target: 'E31N2', source: 'E31N1', 'shard': 'shard1' },
         { target: 'E32N3', source: 'E31N3', 'shard': 'shard1' },
         { target: 'E31N4', source: 'E31N3', 'shard': 'shard1' },
-        //{ target: 'E32N4', source: 'E31N3', 'shard': 'shard1' },
-        //{ target: 'W27N8', source: 'W27N9', 'shard': 'shard0' },
-        //{ target: 'W28N8', source: 'W28N7', 'shard': 'shard0' },
-        //{ target: 'W29N5', source: 'W29N6', 'shard': 'shard0' },
-        //{ target: 'W29N7', source: 'W29N6', 'shard': 'shard0' },
-        //{ target: 'W3N1', source: 'W4N1', 'shard': 'shard3' },
-        //{ target: 'W18S14', source: 'W18S13', 'shard': 'shard0' },
     ];
 
     constructor() {
@@ -84,13 +78,14 @@ export class RemoteFarming extends Operation {
                 }
                 let targetRoom = Game.rooms[expansionRoom.target];
 
-                if (targetRoom.memory.config.energysources) {
+                const cfg = RoomHelper.getRoomConfig(targetRoom);
+                if (cfg && cfg.energysources) {
                     let idx = 0;
-                    for(var source in targetRoom.memory.config.energysources) {
+                    for(var source of cfg.energysources) {
 
-                        for (let i = 1; i <= targetRoom.memory.config.energysources[source].tinyfarmers; i++) {
+                        for (let i = 1; i <= source.tinyfarmers; i++) {
                             let name = 'TinyFarmer_' + expansionRoom.target + '_' + i + '_' + idx;
-                            let rhoperator = new TinyFarmer(name, sourceRoom, targetRoom.name, targetRoom.memory.config.energysources[source].id);
+                            let rhoperator = new TinyFarmer(name, sourceRoom, targetRoom.name, source.id);
                             this.operationOperators.push(rhoperator);
                         }
                         idx++;
@@ -111,32 +106,32 @@ export class RemoteFarming extends Operation {
             var creepOperator = Game.creeps[operationOperator.name];
 
             if (creepOperator) {
-                //console.log(`    Clocking in: ` + operationOperator.name + ' (' + creepOperator.ticksToLive + ')');
+                // alive
             } else {
 
                 // Spawn him.
                 let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
                 if (spawns.length == 0) {
-                    continue;
+                    // no spawns
                 } else {
-                    for (let spawn of spawns) {
+                     const cfg = RoomHelper.getRoomConfig(operationOperator.room);
+                     for (let spawn of spawns) {
                         if (!spawn.spawning) {
-                            let spawnDirection = LEFT;
-                            for (let spawnconfig of operationOperator.room.memory.config.spawns) {
-                                console.log('spawnconfig x: ' + spawnconfig.x + ' spawn pos x: ' + spawn.pos.x + ' spawnconfig y: ' + spawnconfig.y + ' spawn pos y: ' + spawn.pos.y);
+                            let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                            for (let spawnconfig of (cfg && cfg.spawns || [])) {
                                 if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                    spawnDirection = spawnconfig.direction;
+                                    if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                                 }
                             }
 
                             if (operationOperator instanceof Scout) {
                                 console.log(`    Spawning: ` + operationOperator.name);
-                                spawn.spawnCreep([MOVE], operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep([MOVE], operationOperator.name, { directions: spawnDirection});
                             }
 
                             if (operationOperator instanceof TinyFarmer) {
                                 console.log(`    Spawning: ` + operationOperator.name);
-                                spawn.spawnCreep([WORK, CARRY, MOVE, MOVE ], operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep([WORK, CARRY, MOVE, MOVE ], operationOperator.name, { directions: spawnDirection});
                             }
 
                             if (operationOperator instanceof Claimer) {
@@ -148,8 +143,8 @@ export class RemoteFarming extends Operation {
                                         operatorParts.push(MOVE);
                                         operatorParts.push(CLAIM);
                                     }
-                                    if (spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]}) == OK) {
-                                        continue;
+                                    if (spawn.spawnCreep(operatorParts, operationOperator.name, { directions: spawnDirection}) == OK) {
+                                        // successfully queued spawn
                                     }
                                 }
                             }
@@ -160,16 +155,16 @@ export class RemoteFarming extends Operation {
                                     operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000) {
 
                                     if (spawn.spawnCreep([MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
-                                        CARRY, WORK, WORK, WORK, WORK, WORK, WORK], operationOperator.name, { directions: [spawnDirection]}) == OK) {
-                                        continue;
+                                        CARRY, WORK, WORK, WORK, WORK, WORK, WORK], operationOperator.name, { directions: spawnDirection}) == OK) {
+                                        // successfully queued spawn
                                     }
                                 } else if (Game.rooms[operationOperator.targetroom.name] && !operationOperator.room.storage) {
 
-                                    if (spawn.spawnCreep([MOVE, MOVE, MOVE, MOVE, CARRY, WORK, WORK, WORK, WORK], operationOperator.name, { directions: [spawnDirection]}) == OK) {
-                                        continue;
-                                    }
-                                }
-                            }
+                                     if (spawn.spawnCreep([MOVE, MOVE, MOVE, MOVE, CARRY, WORK, WORK, WORK, WORK], operationOperator.name, { directions: spawnDirection}) == OK) {
+                                         // successfully queued spawn
+                                     }
+                                 }
+                             }
 
                             if (operationOperator instanceof Hauler) {
                                 let containerExists = (Game.getObjectById<Source>(operationOperator.memory.sourceid)?.room.memory.sources[operationOperator.memory.sourceid].container.id !== '');
@@ -178,26 +173,26 @@ export class RemoteFarming extends Operation {
                                     operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000 &&
                                     containerExists) {
 
-                                    if (spawn.spawnCreep([
-                                        MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
-                                        MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
-                                        MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
-                                        MOVE, CARRY], operationOperator.name, { directions: [spawnDirection]}) == OK) {
-                                        continue;
-                                    }
-                                } else if (containerExists && !operationOperator.room.storage) {
+                                        if (spawn.spawnCreep([
+                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
+                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
+                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
+                                         MOVE, CARRY], operationOperator.name, { directions: spawnDirection}) == OK) {
+                                         // successfully queued spawn
+                                     }
+                                 } else if (containerExists && !operationOperator.room.storage) {
 
 
-                                    if (spawn.spawnCreep([
-                                        MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
-                                        MOVE, CARRY, MOVE, CARRY, MOVE, CARRY], operationOperator.name, { directions: [spawnDirection]}) == OK) {
-                                        continue;
-                                    }
-                                }
+                                     if (spawn.spawnCreep([
+                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY,
+                                         MOVE, CARRY, MOVE, CARRY, MOVE, CARRY], operationOperator.name, { directions: spawnDirection}) == OK) {
+                                         // successfully queued spawn
+                                     }
+                                 }
                             }
                         } else {
                             console.log(`    Spawning: ` + operationOperator.name + ` at ` + spawn.name + ` Bumping creeps out of the way.`);
-                            if (spawn.spawning.directions[0]) {
+                             if (spawn.spawning.directions[0]) {
                                 let direction = spawn.spawning.directions[0];
                                 let x = spawn.pos.x;
                                 let y = spawn.pos.y;
@@ -219,12 +214,9 @@ export class RemoteFarming extends Operation {
                                     creeps[0].travelTo(new RoomPosition(1,1,spawn.room.name));
                                     creeps[0].say('Bump!');
                                 }
-
                             }
                         }
-
                     }
-
                 }
             }
         }

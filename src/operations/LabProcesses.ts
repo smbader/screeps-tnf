@@ -1,4 +1,3 @@
-import {forEach} from "lodash";
 import { Operation } from "../classes/operation";
 
 export class LabProcesses extends Operation {

@@ -1,4 +1,5 @@
 import { Operator } from "../classes/operator";
+import { RoomHelper } from "../utils/RoomHelper";
 
 // =====================================================================================
 // TYPE DEFINITIONS
@@ -196,7 +197,7 @@ export class GroundSupport extends Operator {
         for (const resourceType in this.creep.store) {
             const resource = resourceType as ResourceConstant;
             if (this.creep.store[resource]! > 0) {
-                // Check if this resource matches current task
+                // Check if this resource matches the current cached task
                 const isTaskResource = this.creep.memory.cachedTask?.task.resourceType === resource;
 
                 if (!isTaskResource) {
@@ -921,9 +922,10 @@ export class GroundSupport extends Operator {
     }
 
     private addContainerTasks(tasks: TransferTask[]): void {
-        if (!this.room.storage || !this.room.memory.config.fieldContainers) return;
+        const cfg = RoomHelper.getRoomConfig(this.room);
+        if (!this.room.storage || !cfg.fieldContainers) return;
 
-        for (const containerConfig of this.room.memory.config.fieldContainers) {
+        for (const containerConfig of cfg.fieldContainers) {
             const container = this.room.find<StructureContainer>(FIND_STRUCTURES, {
                 filter: s => s.structureType === STRUCTURE_CONTAINER &&
                            s.pos.x === containerConfig.x &&
@@ -1159,7 +1161,7 @@ export class GroundSupport extends Operator {
     }
 
     private refreshLinksCache(): void {
-        const config = this.room.memory.config;
+        const config = RoomHelper.getRoomConfig(this.room);
         const sources: Id<StructureLink>[] = [];
         const fields: Id<StructureLink>[] = [];
         let storage: Id<StructureLink> | undefined;
@@ -1209,11 +1211,13 @@ export class GroundSupport extends Operator {
     // =====================================================================================
 
     private parkCreep(): void {
-        if (!this.creep || !this.room.memory.config.chemist?.parking) return;
+        if (!this.creep) return;
+        const cfg = RoomHelper.getRoomConfig(this.room);
+        if (!cfg.chemist?.parking) return;
 
         const parkingPos = new RoomPosition(
-            this.room.memory.config.chemist.parking.x,
-            this.room.memory.config.chemist.parking.y,
+            cfg.chemist.parking.x,
+            cfg.chemist.parking.y,
             this.room.name
         );
 
@@ -1262,8 +1266,8 @@ export class GroundSupport extends Operator {
 
             // Store info
             const storeInfo = Object.keys(this.creep.store)
-                .filter(resource => this.creep!.store[resource as ResourceConstant]! > 0)
-                .map(resource => `${resource}:${this.creep!.store[resource as ResourceConstant]}`)
+                .filter((resource) => this.creep!.store[resource as ResourceConstant]! > 0)
+                .map((resource) => `${resource}:${this.creep!.store[resource as ResourceConstant]}`)
                 .join(', ') || 'Empty';
             visual.text(`Store: ${storeInfo}`, startX, startY + yOffset++, textStyle);
 

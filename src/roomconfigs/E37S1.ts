@@ -5,6 +5,9 @@ export class E37S1 {
         return {
             "shard": "shard1",
             "type": "owned",
+            "roomtemplate": "ricane",
+            "roomanchor": {"x": 32, "y": 14},
+            "templaterotation": 0,
             "energysources": [
                 {
                     "id": "59830013b097071b4adc3bba",

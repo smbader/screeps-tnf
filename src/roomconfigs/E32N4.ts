@@ -4,6 +4,9 @@ export class E32N4 {
         return {
             "shard": "shard1",
             "type": "owned",
+            "roomtemplate": "ricane",
+            "roomanchor": {"x": 12, "y": 23},
+            "templaterotation": 0,
             "energysources": [
                 {
                     "id": "5982ffceb097071b4adc3387",

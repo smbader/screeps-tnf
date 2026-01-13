@@ -1,6 +1,7 @@
 import { Operator } from "../classes/operator";
 import { MapHelper } from "../utils/MapHelper";
 import {GroundSupportCreep} from "./GroundSupport";
+import { RoomHelper } from "../utils/RoomHelper";
 
 interface HarvesterMemory extends CreepMemory {
     sourceid?: Id<Source>;
@@ -102,7 +103,7 @@ export class Harvester extends Operator {
         // Step 3: Build container if needed (only remote or no link)
         if (
             (!link && this.targetroom.controller && this.targetroom.controller.level > 2) ||
-            (this.targetroom.memory.config.type === "remote")
+            (RoomHelper.getRoomConfig(this.targetroom)?.type === "remote")
         ) {
             if (!container) {
                 // Look for construction site at parking

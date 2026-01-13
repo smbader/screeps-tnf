@@ -1,8 +1,7 @@
 import { Operator } from "../classes/operator";
-import { MapHelper } from "../utils/MapHelper";
+import { RoomHelper } from "../utils/RoomHelper";
 
 type FieldStructure = StructureSpawn | StructureExtension | StructureStorage | StructureContainer | StructureLink | StructureTerminal | StructureTower;
-type StoreStructure = StructureTower | StructureSpawn | StructureExtension | StructureLink;
 
 interface FieldMemory extends CreepMemory {
     fieldIndex: Number;
@@ -34,8 +33,9 @@ export class Field extends Operator {
 
     constructor(name: string, room: Room, fieldIndex: number) {
         super(name, room);
+        const cfg = RoomHelper.getRoomConfig(room);
         this.memory = {
-            spawndirection: room.memory.config['field' + fieldIndex].spawndirection,
+            spawndirection: cfg['field' + fieldIndex]?.spawndirection,
             containeridx: 0,
         };
         this.memory.name = name;
@@ -51,14 +51,14 @@ export class Field extends Operator {
     }
 
     actions() {
-        let lastcpucheck = Game.cpu.getUsed();
         // Creep may not exist yet.
         const creep = this.creep;
         if (!creep) return;
 
         // Cache memory and config references for reuse
         const mem = creep.memory;
-        const config = this.room.memory.config['field' + this.memory.fieldindex];
+        const configAll = RoomHelper.getRoomConfig(this.room);
+        const config = configAll['field' + this.memory.fieldindex];
         const parkPos = new RoomPosition(config.parkingspot.x, config.parkingspot.y, this.room.name);
 
         // State management - avoid deep comparisons
@@ -68,7 +68,6 @@ export class Field extends Operator {
         // --- HARVESTING/RETRIEVAL (working === true) ---
         if (mem.working == null || mem.working === true) {
             const sources = config.sources;
-            let foundTarget = false;
 
             const potentialTargets: FieldStructure[] = [];
             for (const src of sources) {
@@ -87,7 +86,7 @@ export class Field extends Operator {
             }
             let target: Structure | null = null;
             if (potentialTargets.length > 0) {
-                target = creep.pos.findClosestByPath(potentialTargets);
+                target = creep.pos.findClosestByPath(potentialTargets) || creep.pos.findClosestByRange(potentialTargets);
             }
             if (target) {
                 const result = creep.withdraw(target, RESOURCE_ENERGY);
@@ -95,11 +94,10 @@ export class Field extends Operator {
                     creep.travelTo(target.pos);
                     Game.map.visual.line(creep.pos, target.pos, { color: "#ff0000", lineStyle: "dashed" });
                 }
-                foundTarget = true;
             }
 
             // If no direct source targets found, fallback for low level rooms
-            if (!foundTarget && creep.room.controller?.level && creep.room.controller.level < 5) {
+            if (!target && creep.room.controller?.level && creep.room.controller.level < 5) {
                 const containerOrStorage = creep.room.find(FIND_STRUCTURES, {
                     filter: structure =>
                         (structure.structureType === STRUCTURE_CONTAINER || structure.structureType === STRUCTURE_STORAGE) &&
@@ -111,7 +109,7 @@ export class Field extends Operator {
                         creep.travelTo(containerOrStorage[0].pos);
                         Game.map.visual.line(creep.pos, containerOrStorage[0].pos, { color: "#ff0000", lineStyle: "dashed" });
                     } else if (result === ERR_NOT_ENOUGH_ENERGY) {
-                        const chemistPark = this.room.memory.config.chemist?.parking;
+                        const chemistPark = configAll.chemist?.parking;
                         if (chemistPark && !(creep.pos.x == chemistPark.x && creep.pos.y == chemistPark.y)) {
                             creep.travelTo(new RoomPosition(chemistPark.x, chemistPark.y, this.room.name));
                         }
@@ -121,7 +119,7 @@ export class Field extends Operator {
                         creep.travelTo(parkPos);
                     }
                 }
-            } else if (!foundTarget) {
+            } else if (!target) {
                 // If no work to do, park
                 if (!(creep.pos.x == parkPos.x && creep.pos.y == parkPos.y)) {
                     creep.travelTo(parkPos);
@@ -157,25 +155,8 @@ export class Field extends Operator {
             if (matching.length > 0) {
                 target = creep.pos.findClosestByPath(matching) || creep.pos.findClosestByRange(matching);
             }
+            // choose closest matching structure
             let foundTarget = !!target;
-
-            /*
-            let foundTarget = false;
-            let target = null;
-            // looping through all empty containers in the room
-            for (let i = 0; i < structures.length; i++) {
-                for (let j = 0; j < containers.length; j++) {
-                    if (containers[j].x == structures[i].pos.x && containers[j].y == structures[i].pos.y) {
-                        target = structures[i];
-                        foundTarget = true;
-                        break
-                    }
-                }
-                if (foundTarget) {break;}
-            }
-             */
-
-
             if (target) {
                 const result = creep.transfer(target, RESOURCE_ENERGY);
                 if (result === ERR_NOT_IN_RANGE) {

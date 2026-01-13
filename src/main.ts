@@ -2,7 +2,7 @@ import { ErrorMapper } from "utils/ErrorMapper";
 import { MapHelper } from "utils/MapHelper";
 import { OperationHelper } from "utils/OperationHelper";
 import { RoomHelper } from "utils/RoomHelper";
-import { TravelToOptions, Traveler, TravelData } from "utils/Traveler";
+import { TravelToOptions, Traveler } from "utils/Traveler";
 
 declare global {
     interface Memory {
@@ -29,12 +29,6 @@ declare global {
         phase?: string | null;
         targetRoom?: string | null;
         targetFighter?: string;
-    }
-
-    namespace NodeJS {
-        interface Global {
-            log: any;
-        }
     }
 
     interface Room {
@@ -215,8 +209,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
   for (let operation of operations) {
     // Takes evalution of what operation and tasks are needed.
       try {
-          //console.log(operation.name);
-          let beforeCpu = Game.cpu.getUsed();
+          console.log('INIT: ' + operation.name);
           operation.init();
           if (Game.shard.name == 'shard3') {
               //console.log(`INIT ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
@@ -231,8 +224,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
   /////console.log(`********  Operation Rolecall and Spawn  ********`);
   for (let operation of operations) {
       try {
-          //console.log(operation.name);
-          let beforeCpu = Game.cpu.getUsed();
+          console.log('ROLECALL: ' + operation.name);
           operation.roleCall();
           if (Game.shard.name == 'shard3') {
               //console.log(`ROLECALL ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
@@ -247,8 +239,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
   /////console.log(`********  Operation Action  ********`);
     let ct = 1;
   for (let operation of operations) {
-      let beforeCpu = Game.cpu.getUsed();
       try {
+          console.log('ACTION: ' + operation.name);
           operation.actions();
       } catch (e) {
           console.log(e);
@@ -281,7 +273,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
         if (room.controller?.owner?.username != 'ricane') {
             continue;
         }
-        if (!room.memory.config || room.memory.config.type !== 'owned') {
+        const cfg = RoomHelper.getRoomConfig(room);
+        if (!cfg || cfg.type !== 'owned') {
             continue;
         }
         if ((room.memory.nextTrade) + 10 < Game.time ) {

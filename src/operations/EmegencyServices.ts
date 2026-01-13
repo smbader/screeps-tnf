@@ -1,11 +1,6 @@
-import {forEach} from "lodash";
 import { Operation } from "../classes/operation";
-import { Operator } from "../classes/operator";
 import { EmergencyWorker } from "../operator/EmergencyWorker";
-import {Field} from "../operator/Field";
-import {Harvester} from "../operator/Harvester";
-import {Hauler} from "../operator/Hauler";
-import {Upgrader} from "../operator/Upgrader";
+import { RoomHelper } from "../utils/RoomHelper";
 
 export class EmergencyServices extends Operation {
     public operationOperators: EmergencyWorker[];
@@ -25,10 +20,11 @@ export class EmergencyServices extends Operation {
             if (room.controller?.owner?.username != 'ricane') {
                 continue;
             }
-            if (!room.memory.config || room.memory.config.type !== 'owned') {
+            const cfgRoom = RoomHelper.getRoomConfig(room);
+            if (!cfgRoom || cfgRoom.type !== 'owned') {
                 continue;
             }
-            if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
+            if (cfgRoom.shard && cfgRoom.shard != Game.shard.name) {
                 continue;
             }
 
@@ -38,12 +34,11 @@ export class EmergencyServices extends Operation {
                 room.memory.starvedTime = 0;
             }
 
-            let operator:Operator;
             let name = '';
             let idx = 0;
 
-            for(var sourceid in room.memory.config.energysources) {
-                let parkingSpaces = room.memory.config.energysources[idx].parkingspots.length;
+            for(var sourceid in cfgRoom.energysources) {
+                let parkingSpaces = cfgRoom.energysources[idx].parkingspots.length;
 
                 // 3 for each parking spot, pull, travel, offloading
                 // there should be max limit because of the source regen
@@ -54,7 +49,7 @@ export class EmergencyServices extends Operation {
 
                 for (let i = 1; i <= (parkingSpaces * perSource); i++) {
                     name = 'Emergency_' + room.name + '_' + i + '_' + idx;
-                    let eoperator = new EmergencyWorker(name, room, room, room.memory.config.energysources[idx].id);
+                    let eoperator = new EmergencyWorker(name, room, room, cfgRoom.energysources[idx].id);
                     this.operationOperators.push(eoperator);
                 }
                 idx++;
@@ -78,14 +73,15 @@ export class EmergencyServices extends Operation {
                 let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
 
                 if (spawns.length == 0) {
-                    continue;
+                    // no spawns
                 } else {
                     for(let spawn of spawns) {
-                        let spawnDirection = LEFT;
-                        if (operationOperator.room.memory.config?.spawns) {
-                            for (let spawnconfig of operationOperator.room.memory.config.spawns) {
-                                if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                    spawnDirection = spawnconfig.direction;
+                        let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                        const cfg = RoomHelper.getRoomConfig(operationOperator.room);
+                        for (let spawnconfig of (cfg && cfg.spawns || [])) {
+                            if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
+                                if (spawnconfig.direction) {
+                                    spawnDirection = [spawnconfig.direction];
                                 }
                             }
                         }
@@ -95,14 +91,10 @@ export class EmergencyServices extends Operation {
                             controllerLevel = spawn.room.controller.level;
                         }
                         if (!spawn.spawning) {
-                             if (operationOperator instanceof EmergencyWorker) {
-
                                  // New Emergency worker rule.  Always spawn level 1, 2, 3 or if there are no workers and low energy.
                                 if (controllerLevel <= 3 || operationOperator.room.memory.starvedTime > 200 || operationOperator.room.storage == undefined) {
-
-                                    console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep([WORK, CARRY, MOVE, MOVE], operationOperator.name, { directions: [spawnDirection]}));
+                                    console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep([WORK, CARRY, MOVE, MOVE], operationOperator.name, { directions: spawnDirection}));
                                 }
-                            }
                         }
                     }
                 }

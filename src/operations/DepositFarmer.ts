@@ -1,6 +1,7 @@
 import { Operation } from "../classes/operation";
 import { Operator } from "../classes/operator";
 import { DepositMiner } from "../operator/DepositMiner";
+import { RoomHelper } from "../utils/RoomHelper";
 
 
 export class DepositFarmer extends Operation {
@@ -8,17 +9,6 @@ export class DepositFarmer extends Operation {
     operationOperators:Operator[];
     depositRooms:any[] = [
         { target: 'E30N1', source: 'E31N1', 'shard': 'shard1' },
-        /*{ target: 'W12N0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W13N0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W14N0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W15N0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W11S0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W12S0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W13S0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W14S0', source: 'W13N2', 'shard': 'shard3' },
-        { target: 'W15S0', source: 'W13N2', 'shard': 'shard3' },
-
-        { target: 'W20N0', source: 'W18N2', 'shard': 'shard3' },*/
     ];
 
     constructor() {
@@ -42,8 +32,8 @@ export class DepositFarmer extends Operation {
                 });
                 if (observers.length > 0) {
                     let observer = observers[0];
-                    let result = observer.observeRoom(depositRoom.target);
-                    //console.log('[' + sourceRoom.name + '] scanning room [' + depositRoom.target + '] (' + result + ')');
+                    observer.observeRoom(depositRoom.target);
+                    //console.log('[' + sourceRoom.name + '] scanning room [' + depositRoom.target + ']');
                 }
             }
 
@@ -62,20 +52,21 @@ export class DepositFarmer extends Operation {
             var creepOperator = Game.creeps[operationOperator.name];
 
             if (creepOperator) {
-                //console.log(`    Clocking in: ` + operationOperator.name + ' (' + creepOperator.ticksToLive + ')');
+                // alive
             } else {
 
                 // Spawn him.
                 let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
                 if (spawns.length == 0) {
-                    continue;
+                    // no spawns
                 } else {
+                    const cfg = RoomHelper.getRoomConfig(operationOperator.room);
                     for (let spawn of spawns) {
                         if (!spawn.spawning) {
-                            let spawnDirection = LEFT;
-                            for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+                            let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                            for (let spawnconfig of (cfg && cfg.spawns || [])) {
                                 if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                    spawnDirection = spawnconfig.direction;
+                                    if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                                 }
                             }
 
@@ -92,30 +83,27 @@ export class DepositFarmer extends Operation {
 
                                             if (spawn.spawnCreep(
                                                 [MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY]
-                                                , operationOperator.name, {directions: [spawnDirection]}) == OK) {
-                                                continue;
-                                            }
-                                        }
-                                    }
-
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+                                                , operationOperator.name, {directions: spawnDirection}) == OK) {
+                                                // spawn queued (if possible)
+                                         }
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+         }
+     }
 
     actions() {
 
-        //console.log(`--------  Remote Farming Actions  ------`);
         for (let operationOperator of this.operationOperators) {
             let cpuStart = Game.cpu.getUsed();
             operationOperator.actions();
             let cpuUsed = Game.cpu.getUsed() - cpuStart;
             if (cpuUsed > 0.5) {
-                //console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
             }
         }
     }

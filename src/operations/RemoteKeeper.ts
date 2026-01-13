@@ -4,6 +4,7 @@ import {RemoteGeologist} from "../operator/RemoteGeologist";
 import { Scout } from "../operator/Scout";
 import { KeeperKiller } from "../operator/KeeperKiller";
 import { RemoteHarvester } from "../operator/RemoteHarvester";
+import { RoomHelper } from "../utils/RoomHelper";
 
 
 export class RemoteKeeper extends Operation {
@@ -27,13 +28,14 @@ export class RemoteKeeper extends Operation {
             let sourceRoom = Game.rooms[keeperRoom.source];
             if (!sourceRoom) { continue; }
 
+            const cfgSrc = RoomHelper.getRoomConfig(sourceRoom);
             if (sourceRoom.controller?.owner?.username != 'ricane') {
                 continue;
             }
-            if (!sourceRoom.memory.config || sourceRoom.memory.config.type !== 'owned') {
+            if (!cfgSrc || cfgSrc.type !== 'owned') {
                 continue;
             }
-            if (sourceRoom.memory.config.shard && sourceRoom.memory.config.shard != Game.shard.name) {
+            if (cfgSrc.shard && cfgSrc.shard != Game.shard.name) {
                 continue;
             }
 
@@ -64,10 +66,11 @@ export class RemoteKeeper extends Operation {
             let k2operator = new KeeperKiller(name, sourceRoom, keeperRoom.target);
             this.operationOperators.push(k2operator);
 
-            if (targetRoom.memory.config?.energysources) {
+            const cfgTarget = RoomHelper.getRoomConfig(targetRoom);
+            if (cfgTarget?.energysources) {
 
                 let idx = 0;
-                for (let energysource of targetRoom.memory.config.energysources) {
+                for (let energysource of cfgTarget.energysources) {
 
                     name = 'RemoteHarvester_' + keeperRoom.target + '_' + idx;
                     let rhoperator = new RemoteHarvester(name, sourceRoom, keeperRoom.target, energysource.id);
@@ -87,7 +90,7 @@ export class RemoteKeeper extends Operation {
             var creepOperator = Game.creeps[operationOperator.name];
 
             if (creepOperator) {
-                //console.log(`    Clocking in: ` + operationOperator.name + ' (' + creepOperator.ticksToLive + ')');
+                // alive
             } else {
 
                 // Spawn him.
@@ -96,19 +99,20 @@ export class RemoteKeeper extends Operation {
                 if (spawns.length == 0) {
                     continue;
                 } else {
+                    const cfg = RoomHelper.getRoomConfig(operationOperator.room);
                     for (let spawn of spawns) {
                         if (!spawn.spawning) {
 
-                            let spawnDirection = LEFT;
-                            for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+                            let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                            for (let spawnconfig of (cfg && cfg.spawns || [])) {
                                 if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                    spawnDirection = spawnconfig.direction;
+                                    if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                                 }
                             }
 
                             if (operationOperator instanceof Scout) {
                                 console.log(`    Spawning: ` + operationOperator.name);
-                                spawn.spawnCreep([MOVE], operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep([MOVE], operationOperator.name, { directions: spawnDirection});
                             }
 
                             if (operationOperator instanceof KeeperKiller) {
@@ -118,7 +122,7 @@ export class RemoteKeeper extends Operation {
                                     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
                                     MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL,
                                 ];
-                                spawn.spawnCreep(body, operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep(body, operationOperator.name, { directions: spawnDirection});
                             }
 
                             if (operationOperator instanceof RemoteGeologist) {
@@ -129,7 +133,7 @@ export class RemoteKeeper extends Operation {
                                     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
                                     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
                                 ];
-                                spawn.spawnCreep(body, operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep(body, operationOperator.name, { directions: spawnDirection});
                             }
 
                             if (operationOperator instanceof RemoteHarvester) {
@@ -140,7 +144,7 @@ export class RemoteKeeper extends Operation {
                                     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
                                     MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
                                 ];
-                                spawn.spawnCreep(body, operationOperator.name, { directions: [spawnDirection]});
+                                spawn.spawnCreep(body, operationOperator.name, { directions: spawnDirection});
                             }
 
                         }

@@ -1,5 +1,6 @@
 import {extend} from "lodash";
 import {Operator} from "../classes/operator";
+import { RoomHelper } from "../utils/RoomHelper";
 
 interface UpgraderMemory extends CreepMemory {
     targetSource: string;
@@ -53,7 +54,8 @@ export class Upgrader extends Operator {
             return;
         }
 
-        let controllerLinkpos = this.creep.room.memory.config.controllerLink;
+        const cfg = RoomHelper.getRoomConfig(this.creep.room);
+        let controllerLinkpos = cfg.controllerLink;
         var controllerLinks = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
             filter: (structure) => {
                 return structure.pos.x === controllerLinkpos.x

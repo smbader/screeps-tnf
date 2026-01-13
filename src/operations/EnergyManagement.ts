@@ -4,6 +4,7 @@ import { Harvester } from "../operator/Harvester";
 import { Hauler } from "../operator/Hauler";
 import { Upgrader } from "../operator/Upgrader";
 import { Field } from "../operator/Field";
+import { RoomHelper } from "../utils/RoomHelper";
 
 export class EnergyManagement extends Operation {
 
@@ -52,10 +53,11 @@ export class EnergyManagement extends Operation {
             if (room.controller?.owner?.username != 'ricane') {
                 continue;
             }
-            if (!room.memory.config || room.memory.config.type !== 'owned') {
+            const cfg = RoomHelper.getRoomConfig(room);
+            if (!cfg || cfg.type !== 'owned') {
                 continue;
             }
-            if (room.memory.config.shard && room.memory.config.shard != Game.shard.name) {
+            if (cfg.shard && cfg.shard != Game.shard.name) {
                 continue;
             }
             let operator:Operator;
@@ -80,8 +82,8 @@ export class EnergyManagement extends Operation {
             this.operationOperators.push(operator);
 
             for (let i = 0; i < 6;  i++) {
-                if (room.memory.config['field' + i]) {
-                    if (room.memory.config['field' + i].levels.includes(room.controller.level)) {
+                if (cfg['field' + i]) {
+                    if (cfg['field' + i].levels.includes(room.controller.level)) {
                         name = 'Field_' + room.name + '_' + i;
                         operator = new Field(name, room, i);
                         this.operationOperators.push(operator);
@@ -90,22 +92,21 @@ export class EnergyManagement extends Operation {
             }
 
             let idx = 0;
-            for(var energysource in room.memory.config.energysources) {
-                //console.log(room.name + ' Source ' + idx + ' Link: ' + room.memory.config.energysources[idx].linkpos);
+            for(var energysource in cfg.energysources) {
 
                 let harvesterName1 = 'Harvester_' + room.name + '_' + 0 + '_' + idx;
-                operator = new Harvester(harvesterName1, room, room.memory.config.energysources[idx].id, room);
+                operator = new Harvester(harvesterName1, room, cfg.energysources[idx].id, room);
                 this.operationOperators.push(operator);
 
-                if (room.memory.config.energysources[idx].linkpos && room.lookForAt(LOOK_STRUCTURES, room.memory.config.energysources[idx].linkpos.x, room.memory.config.energysources[idx].linkpos.y).length > 0) {
+                if (cfg.energysources[idx].linkpos && room.lookForAt(LOOK_STRUCTURES, cfg.energysources[idx].linkpos.x, cfg.energysources[idx].linkpos.y).length > 0) {
                     // Using link to deliver energy. Don't need haulers anymore for this energy source.
                     //console.log('[' + room.name + '] Haulers not needed: ' + idx);
                 } else {
                     if (room.storage != null) {
-                        for (let i = 0; i < room.memory.config.energysources[idx].haulers;  i++) {
+                        for (let i = 0; i < cfg.energysources[idx].haulers;  i++) {
                             let haulerName = 'Hauler_' + room.name + '_' + i + '_' + idx;
 
-                            operator = new Hauler(haulerName, room, room.memory.config.energysources[idx].id, false);
+                            operator = new Hauler(haulerName, room, cfg.energysources[idx].id, false);
                             this.operationOperators.push(operator);
                         }
 
@@ -121,9 +122,9 @@ export class EnergyManagement extends Operation {
                 this.operationOperators.push(operator);
             }
 
-            if (room.controller.level < 5 && room.storage && room.memory.config.energysources.length > 0) {
+            if (room.controller.level < 5 && room.storage && cfg.energysources.length > 0) {
                 let haulerName = 'Hauler_' + room.name + '_storage';
-                operator = new Hauler(haulerName, room, room.memory.config.energysources[0].id, true);
+                operator = new Hauler(haulerName, room, cfg.energysources[0].id, true);
                 this.operationOperators.push(operator);
             }
 
@@ -141,7 +142,7 @@ export class EnergyManagement extends Operation {
 
 
             if (creepOperator) {
-                //console.log(`    Clocking in: ` +  operationOperator.name + ' (' + creepOperator.ticksToLive  + ')');
+                // alive
             } else {
                 // Spawn him.
                 let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
@@ -150,11 +151,12 @@ export class EnergyManagement extends Operation {
                     continue;
                 } else {
 
+                    const cfg = RoomHelper.getRoomConfig(operationOperator.room);
                     for(let spawn of spawns) {
-                        let spawnDirection = LEFT;
-                        for (let spawnconfig of operationOperator.room.memory.config.spawns) {
+                        let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+                        for (let spawnconfig of (cfg && cfg.spawns || [])) {
                             if (spawnconfig.x == spawn.pos.x && spawnconfig.y == spawn.pos.y) {
-                                spawnDirection = spawnconfig.direction;
+                                if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                             }
                         }
                         var controllerLevel = 0;
@@ -179,7 +181,7 @@ export class EnergyManagement extends Operation {
                                 }
                                 operatorParts.push(CARRY);
                                 operatorParts.push(MOVE);
-                                let result = spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]});
+                                let result = spawn.spawnCreep(operatorParts, operationOperator.name, { directions: spawnDirection});
                                 console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + result);
                                 if (result == ERR_NOT_ENOUGH_RESOURCES) {
                                     holding = true;
@@ -196,10 +198,6 @@ export class EnergyManagement extends Operation {
                                 operatorParts.push(CARRY);
                                 operatorParts.push(MOVE);
 
-                                //if (!operationOperator.room.storage && controllerLevel == 4) {
-                                //    // The won't be able to build very big upgraders, so build a lot
-                                //    console.log(`    Spawning ` + operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]}));
-                                //} else if
                                 if
                                     (
                                         (operationOperator.room.storage && operationOperator.name === 'Upgrader_' + operationOperator.room.name + '_0'  && operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 40000  && controllerLevel < 8) ||
@@ -208,7 +206,7 @@ export class EnergyManagement extends Operation {
                                         (operationOperator.room.storage && operationOperator.name === 'Upgrader_' + operationOperator.room.name + '_3'  && operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 800000 && operatorParts.length > 16 && controllerLevel < 8) ||
                                         (operationOperator.room.storage && operationOperator.name === 'Upgrader_' + operationOperator.room.name + '_0'  && controllerLevel == 8 && operationOperator.room.controller && operationOperator.room.controller.ticksToDowngrade < 65000)
                                     ) {
-                                    console.log(`    Spawning ` + operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]}));
+                                    console.log(`    Spawning ` + operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: spawnDirection}));
                                 }
 
                             } else if (operationOperator instanceof Hauler) {
@@ -219,7 +217,7 @@ export class EnergyManagement extends Operation {
                                     operatorParts.push(CARRY);
                                     operatorParts.push(MOVE);
                                 }
-                                console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: [spawnDirection]}));
+                                console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name, { directions: spawnDirection}));
                             }
                         }
                     }
@@ -227,12 +225,14 @@ export class EnergyManagement extends Operation {
 
 
                 // New employement
-                if (operationOperator instanceof Field && operationOperator.room.memory.config) {
-                    if (operationOperator.room.memory.config['field' + operationOperator.memory.fieldindex].spawn &&
-                        operationOperator.room.memory.config['field' + operationOperator.memory.fieldindex].levels.includes(operationOperator.room.controller?.level)) {
+                if (operationOperator instanceof Field) {
+                    const cfgField = RoomHelper.getRoomConfig(operationOperator.room);
+                    const fieldKey = 'field' + operationOperator.memory.fieldindex;
+                    const fieldCfg = cfgField && cfgField[fieldKey];
+                    if (fieldCfg && fieldCfg.spawn && fieldCfg.levels && operationOperator.room.controller && fieldCfg.levels.includes(operationOperator.room.controller.level)) {
 
-                        let spawnX = operationOperator.room.memory.config['field' + operationOperator.memory.fieldindex].spawn.x;
-                        let spawnY = operationOperator.room.memory.config['field' + operationOperator.memory.fieldindex].spawn.y;
+                        let spawnX = fieldCfg.spawn.x;
+                        let spawnY = fieldCfg.spawn.y;
 
                         let spawn = operationOperator.room.find<StructureSpawn>(FIND_MY_STRUCTURES, {
                             filter: function(object) {
@@ -251,7 +251,7 @@ export class EnergyManagement extends Operation {
                             }
 
                             console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name,
-                                { directions: operationOperator.room.memory.config['field' + operationOperator.memory.fieldindex].spawndirection }));
+                                { directions: cfgField['field' + operationOperator.memory.fieldindex].spawndirection }));
 
                         } else if (operationOperator.room.controller != null && operationOperator.room.controller.level <= 7 && spawns.length > 0) {
 
@@ -284,20 +284,21 @@ export class EnergyManagement extends Operation {
             if (room.controller?.owner?.username != 'ricane') {
                 continue;
             }
-            if (!room.memory.config || room.memory.config.type !== 'owned') {
+            const cfg = RoomHelper.getRoomConfig(room);
+            if (!cfg || cfg.type !== 'owned') {
                 continue;
             }
 
             try {
 
                 //console.log('[' + room.name + '] Energy Network ');
-                let storagelinkpos = room.memory.config.storagelink;
+                let storagelinkpos = cfg.storagelink;
 
                 let idx = 0;
                 var sourceLinks:StructureLink[] = [];
 
-                for(var energysource in room.memory.config.energysources) {
-                    let sourcelinkpos = room.memory.config.energysources[idx].linkpos;
+                for(var energysource in cfg.energysources) {
+                    let sourcelinkpos = cfg.energysources[idx].linkpos;
                     if (sourcelinkpos) {
                         sourceLinks = [...sourceLinks, ...(room.find<StructureLink>(FIND_STRUCTURES, {
                             filter: (structure) => {
@@ -355,13 +356,12 @@ export class EnergyManagement extends Operation {
                         }
 
 
-                        let result = storagelink.transferEnergy(targetLink, Math.min(targetLink.store.getFreeCapacity(RESOURCE_ENERGY), storagelink.store.getUsedCapacity(RESOURCE_ENERGY)));
-                        //console.log('[' + room.name + '] Send Link Xfer ' + result);
+                        storagelink.transferEnergy(targetLink, Math.min(targetLink.store.getFreeCapacity(RESOURCE_ENERGY), storagelink.store.getUsedCapacity(RESOURCE_ENERGY)));
+                        //console.log('[' + room.name + '] Send Link Xfer called');
 
                         room.memory.data.storagelinktarget = null;
                         room.memory.data.storagelinkcommand == 'inbound';
-                        continue;
-
+                        // done for this room
 
                     }
 

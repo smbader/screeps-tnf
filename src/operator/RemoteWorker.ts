@@ -69,6 +69,7 @@ export class RemoteWorker extends Operator {
         if (!this.creep) {
             return;
         }
+        console.log('RemoteWorker ' + this.creep.name + ' in ' + this.creep.room.name + ' working on ' + this.targetroom.name);
 
         // First objective is to complete waypoints
         if (this.creep.memory.waypoint == undefined || this.creep.memory.waypoint == null)  {
@@ -112,6 +113,7 @@ export class RemoteWorker extends Operator {
 
         // While you're harvesting continue until you're full.
         if ( this.creep.memory.working == true) {
+            this.creep.say('harvest');
             // Am I in range of the source?  If not, let's focus on that.
             //if (this.creep.pos.getRangeTo(this.source) > 6) {
             //    this.creep.say('closer');
@@ -209,6 +211,7 @@ export class RemoteWorker extends Operator {
             }
 
         } else {
+            this.creep.say('work');
 
             if (this.creep.memory.target == null) {
 

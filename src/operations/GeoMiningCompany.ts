@@ -1,5 +1,6 @@
 import { Operation } from "../classes/operation";
 import { Geologist } from "../operator/Geologist";
+import { RoomHelper } from "../utils/RoomHelper";
 
 export class GeoMiningCompany extends Operation {
     public operationOperators: Geologist[];
@@ -52,10 +53,11 @@ export class GeoMiningCompany extends Operation {
             if (spawns.length === 0) continue;
 
             const spawn = spawns[0];
-            let spawnDirection = LEFT;
-            for (const spawnconfig of room.memory.config.spawns) {
+            let spawnDirection = [TOP, TOP_LEFT, LEFT, BOTTOM_LEFT, BOTTOM, BOTTOM_RIGHT, RIGHT, TOP_RIGHT];
+            const cfg = RoomHelper.getRoomConfig(room);
+            for (const spawnconfig of (cfg && cfg.spawns) || []) {
                 if (spawnconfig.x === spawn.pos.x && spawnconfig.y === spawn.pos.y) {
-                    spawnDirection = spawnconfig.direction;
+                    if (spawnconfig.direction) spawnDirection = [spawnconfig.direction];
                     break;
                 }
             }
@@ -66,7 +68,7 @@ export class GeoMiningCompany extends Operation {
             for (let i = 0; i < workParts; i++) {
                 body.push(WORK, CARRY, MOVE);
             }
-            spawn.spawnCreep(body, operator.name, { directions: [spawnDirection] });
+            spawn.spawnCreep(body, operator.name, { directions: spawnDirection });
         }
     }
 
