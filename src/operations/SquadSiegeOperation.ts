@@ -1099,8 +1099,9 @@ export class SquadSiegeOperation extends Operation {
     }
 
     if (this.waitForTowersDepleted()) return;
-    //if (this.attackHostiles()) return;
-    //if (this.breachWall()) return;
+    // TODO: These attack methods are currently disabled in the original implementation
+    // if (this.attackHostiles()) return;
+    // if (this.breachWall()) return;
     this.attackStructures();
   }
 }

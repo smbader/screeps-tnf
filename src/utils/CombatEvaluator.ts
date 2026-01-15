@@ -167,10 +167,15 @@ export class CombatEvaluator {
       // Estimate total hits needed to breach (assume need to break through ~3 walls)
       forces.wallHits = avgHits * 3;
 
-      // Separate rampart hits
+      // Calculate rampart hits separately (also sample-based for consistency)
       const ramparts = walls.filter(s => s.structureType === STRUCTURE_RAMPART);
       if (ramparts.length > 0) {
-        forces.rampartHits = ramparts.reduce((sum, r) => sum + r.hits, 0) / ramparts.length;
+        const rampartSample = Math.min(5, ramparts.length);
+        let totalRampartHits = 0;
+        for (let i = 0; i < rampartSample; i++) {
+          totalRampartHits += ramparts[i].hits;
+        }
+        forces.rampartHits = (totalRampartHits / rampartSample) * 2; // Estimate 2 ramparts to breach
       }
     }
 
