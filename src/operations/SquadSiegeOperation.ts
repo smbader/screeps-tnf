@@ -572,8 +572,8 @@ export class SquadSiegeOperation extends Operation {
           this.visualizeCreep(creep, `Move to ${injured.name}`, "green");
         }
       } else {
-        // Self-heal if no one else needs it
-        //creep.heal(creep);
+        // Note: Self-heal is intentionally disabled to conserve heal actions
+        // creep.heal(creep);
         this.visualizeCreep(creep, "Self-heal", "yellow");
       }
     }
