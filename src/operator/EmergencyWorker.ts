@@ -154,12 +154,15 @@ export class EmergencyWorker extends Operator {
             if (this.creep.memory.target == null) {
 
                 // IF TOWERS NEED ENERGY
-                var targets = this.creep.room.find<StructureTower>(FIND_STRUCTURES, {
-                    filter: (structure) => {
-                        return structure.structureType == STRUCTURE_TOWER &&
-                            structure.store.getFreeCapacity(RESOURCE_ENERGY) > 200;
-                    }
-                });
+                let targets: any[] = [];
+                if (this.creep.room.energyAvailable > 2000) {
+                    targets = this.creep.room.find<StructureTower>(FIND_STRUCTURES, {
+                        filter: (structure) => {
+                            return structure.structureType == STRUCTURE_TOWER &&
+                                structure.store.getFreeCapacity(RESOURCE_ENERGY) > 200;
+                        }
+                    });
+                }
 
                 let spawnConstruction = this.source.pos.findClosestByRange(FIND_CONSTRUCTION_SITES);
                 let empty = MapHelper.getClosestEmpty(this.creep);

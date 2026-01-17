@@ -112,7 +112,7 @@ export class PowerFarming extends Operation {
                                         if (ps.hits > 0) {
                                             let result = spawn.spawnCreep(
                                                 [MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK]
-                                                , operationOperator.name, {directions: [spawnDirection]});
+                                                , operationOperator.name, {directions: spawnDirection});
                                             if (result == OK) {
                                                 continue;
                                             } else {
@@ -139,7 +139,7 @@ export class PowerFarming extends Operation {
                                         if (ps.hits > 0) {
                                             let result = spawn.spawnCreep([
                                                 HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE
-                                            ], operationOperator.name, {directions: [spawnDirection]});
+                                            ], operationOperator.name, {directions: spawnDirection});
                                             if (result == OK) continue;
                                             else console.log('cant spawn healer ' + result);
                                         }

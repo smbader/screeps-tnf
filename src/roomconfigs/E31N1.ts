@@ -71,7 +71,7 @@ export class E31N1 {
             "field0": {
                 "levels": [4, 5, 6, 7, 8],
                 "spawn": {"x": 31, "y": 33},
-                "spawndirection": [TOP_RIGHT],
+                "spawndirection": [TOP_RIGHT, TOP],
                 "parkingspot": {"x": 39, "y": 25},
                 "sources": [
                     {"x": 40, "y": 24},
@@ -84,7 +84,7 @@ export class E31N1 {
             "field2": {
                 "levels": [6, 7, 8],
                 "spawn": {"x": 36, "y": 40},
-                "spawndirection": [TOP_RIGHT],
+                "spawndirection": [TOP_RIGHT, TOP],
                 "parkingspot": {"x": 43, "y": 33},
                 "sources": [
                     {"x": 43, "y": 32},

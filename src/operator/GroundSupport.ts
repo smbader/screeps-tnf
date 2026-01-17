@@ -72,6 +72,27 @@ export class GroundSupport extends Operator {
             return;
         }
 
+        // Terminal refill process: if active, short-circuit normal behavior so the ground support
+        // creep focuses only on clearing non-energy from terminal, refilling energy, and picking up drops.
+        const memAny = this.room.memory as any;
+        if (memAny._terminalRefill && memAny._terminalRefill.active) {
+            this.handleTerminalRefillProcess();
+            this.drawDebugInfo();
+            return;
+        }
+
+        // Auto-detect stuck condition and initiate refill process if detected
+        const stuckCondition = this.detectTerminalStuckCondition();
+        if (stuckCondition) {
+            // Clear any cached task so the creep will be dedicated to the refill process
+            this.clearCachedTask();
+            memAny._terminalRefill = { active: true, phase: 'withdraw_and_drop', resources: stuckCondition.resources };
+            console.log(`[GroundSupport:${this.room.name}] Initiating terminal refill process for ${stuckCondition.resources.join(',')}`);
+            this.handleTerminalRefillProcess();
+            this.drawDebugInfo();
+            return;
+        }
+
         // Determine creep state and act accordingly
         const state = this.determineCreepState();
         this.creep.memory.state = state;
@@ -682,7 +703,7 @@ export class GroundSupport extends Operator {
         const storageLinkNearlyFull = target.store.getFreeCapacity(RESOURCE_ENERGY) < 100;
 
         // If storage link is nearly full, don't allow source-to-storage transfers
-        // This will cause the task to be invalidated and the creep will pick up the higher priority
+        // This will cause the task to invalidated and the creep will pick up the higher priority
         // offload task instead
         if (storageLinkNearlyFull) {
             return false;
@@ -1249,8 +1270,27 @@ export class GroundSupport extends Operator {
         visual.text(`Room: ${this.room.name}`, startX, startY + yOffset++, textStyle);
         visual.text(`Storage: ${this.room.storage ? 'Yes' : 'No'}`, startX, startY + yOffset++, textStyle);
 
-        // Creep status
-        if (!this.creep) {
+        // Show active terminal-refill process (if any)
+        try {
+            const memAny = this.room.memory as any;
+            const refill = memAny._terminalRefill;
+            if (refill && refill.active) {
+                const phase = refill.phase || 'unknown';
+                const resourcesList = (refill.resources || []).length ? (refill.resources || []).join(',') : 'none';
+                const terminal = this.room.terminal;
+                const termEnergy = terminal ? terminal.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
+                const storageFree = this.room.storage ? this.room.storage.store.getFreeCapacity() : 0;
+                const refillStyle = { ...textStyle, color: '#ffcc00', fontSize: 0.6 } as const;
+                visual.text(`Refill: ${phase}`, startX, startY + yOffset++, refillStyle);
+                visual.text(`Resources: ${resourcesList}`, startX, startY + yOffset++, refillStyle);
+                visual.text(`Terminal E: ${termEnergy} | Storage free: ${storageFree}`, startX, startY + yOffset++, refillStyle);
+            }
+        } catch (e) {
+            // don't let debug visuals break main loop
+        }
+
+         // Creep status
+         if (!this.creep) {
             visual.text(`Creep: NOT FOUND`, startX, startY + yOffset++, { ...textStyle, color: '#ff0000' });
 
             // Show what creeps exist in the room for debugging
@@ -1391,26 +1431,440 @@ export class GroundSupport extends Operator {
             visual.text(`Tasks: Cannot generate (need creep + storage)`, startX, startY + yOffset++, { ...textStyle, color: '#ff8800' });
         }
     }
-}
 
-// =====================================================================================
-// GLOBAL EXTENSIONS
-// =====================================================================================
+    // =====================================================================================
+    // TERMINAL REFILL PROCESS
+    // =====================================================================================
 
-declare global {
-    interface String {
-        hashCode(): number;
-    }
-}
+    private handleTerminalRefillProcess(): void {
+         if (!this.creep) return;
 
-if (!String.prototype.hashCode) {
-    String.prototype.hashCode = function() {
-        let hash = 0;
-        for (let i = 0; i < this.length; i++) {
-            const char = this.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32-bit integer
+        const memAny = this.room.memory as any;
+        const activeProcess = memAny._terminalRefill;
+         if (!activeProcess || !activeProcess.active) return;
+
+        // Diagnostic: log phase and key stats once per 10 ticks to help debug why a transition isn't happening
+        try {
+            if (Game.time % 10 === 0) {
+                const terminal = this.room.terminal;
+               const termE = terminal ? terminal.store.getUsedCapacity(RESOURCE_ENERGY) : 'NA';
+                const termFree = terminal ? terminal.store.getFreeCapacity() : 'NA';
+                const storageE = this.room.storage ? this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) : 'NA';
+                console.log(`[GroundSupport:${this.room.name}] refill PROCESS tick=${Game.time} phase=${activeProcess.phase} termE=${termE} termFree=${termFree} storageE=${storageE} resources=${(activeProcess.resources||[]).join(',')}`);
+            }
+        } catch (e) {}
+
+         // Ensure we have a list of resources to clear
+         if (!activeProcess.resources) {
+             // compute list of non-energy resources present in terminal
+             const terminal = this.room.terminal;
+             activeProcess.resources = [];
+             if (terminal) {
+                 for (const r in terminal.store) {
+                     const resKey = r as ResourceConstant;
+                     if (resKey !== RESOURCE_ENERGY && terminal.store.getUsedCapacity(resKey) > 0) activeProcess.resources.push(resKey);
+                 }
+             }
+             // persist updated resource list
+             memAny._terminalRefill = activeProcess;
+         }
+
+        // Phased handling based on current phase
+        // Quick transition check: if we're currently withdrawing/dropping and terminal now has
+        // enough free capacity to accept ~30k energy and storage has energy available,
+        // promote to the transfer phase immediately (avoid waiting another tick).
+        try {
+            const terminal = this.room.terminal;
+            const storageEnergyAvailable = this.room.storage ? this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
+            const terminalFreeTotal = terminal ? terminal.store.getFreeCapacity() : 0;
+            if (activeProcess.phase === 'withdraw_and_drop' && terminalFreeTotal >= 30000 && storageEnergyAvailable > 0) {
+                // update memory and run transfer phase immediately
+                memAny._terminalRefill = { ...(memAny._terminalRefill || {}), phase: 'transfer_energy', resources: [] };
+                console.log(`[GroundSupport:${this.room.name}] immediate transition -> transfer_energy (termFreeTotal=${terminalFreeTotal}, storageE=${storageEnergyAvailable})`);
+                this.phaseTransferEnergyToTerminal();
+                return;
+            }
+        } catch (e) {
+            // defensive: ignore errors here to avoid breaking refill
         }
-        return hash;
-    };
-}
+
+        switch (activeProcess.phase) {
+            case 'withdraw_and_drop':
+                this.phaseWithdrawAndDrop();
+                break;
+            case 'transfer_energy':
+                this.phaseTransferEnergyToTerminal();
+                break;
+            case 'pickup':
+                this.phasePickupAndStore();
+                break;
+            default:
+                this.clearTerminalRefill();
+                break;
+        }
+    }
+
+    private phaseWithdrawAndDrop(): void {
+        if (!this.creep) return;
+        const terminal = this.room.terminal;
+        if (!terminal) { this.clearTerminalRefill(); return; }
+        const memAny = this.room.memory as any;
+        const proc = memAny._terminalRefill;
+        if (!proc) { this.clearTerminalRefill(); return; }
+
+        // If terminal has enough free capacity AND room.storage has energy available, transition to transfer_energy.
+        try {
+            const terminalFreeTotal = terminal.store.getFreeCapacity();
+            const terminalFreeEnergy = terminal.store.getFreeCapacity(RESOURCE_ENERGY);
+            const storageEnergyAvailable = this.room.storage ? this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
+
+            // Require terminal space to start transfers. If terminal has >=30k free overall, switch to transfer phase.
+            if (terminalFreeTotal >= 30000) {
+                const p = memAny._terminalRefill;
+                if (p) {
+                    p.phase = 'transfer_energy';
+                    // clear resource list so we don't keep attempting to withdraw non-energy
+                    p.resources = [];
+                }
+                console.log(`[GroundSupport:${this.room.name}] transition -> transfer_energy (termFreeTotal=${terminalFreeTotal}, termFreeEnergy=${terminalFreeEnergy}, storageEnergy=${storageEnergyAvailable})`);
+                // Immediately perform the transfer phase to avoid waiting an extra tick
+                this.phaseTransferEnergyToTerminal();
+                return;
+             }
+        } catch (e) {
+            // ignore; defensive
+        }
+
+        // If creep currently carries any resources (including energy), drop all of them at terminal.pos
+        if (this.creep.store.getUsedCapacity() > 0) {
+            // Move to terminal if not in range
+            if (!this.creep.pos.isNearTo(terminal.pos)) {
+                // Indicate moving to terminal to drop carried items
+                this.creep.travelTo(terminal.pos, { reusePath: 25 });
+                this.creep.say(`🚮→ T`);
+                return;
+            }
+
+            // At terminal: drop each carried resource type
+            let droppedAny = false;
+            for (const resType in this.creep.store) {
+                const amt = this.creep.store.getUsedCapacity(resType as ResourceConstant);
+                if (amt > 0) {
+                    const dropped = this.creep.drop(resType as ResourceConstant, amt);
+                    if (dropped === OK) {
+                        this.creep.say(`🚮 Dropped ${resType}`);
+                        droppedAny = true;
+                    } else {
+                        // Log unexpected drop failure but continue attempting other resources
+                        console.log(`[GroundSupport:${this.room.name}] failed to drop ${resType}: ${dropped}`);
+                    }
+                }
+            }
+
+            // If we dropped anything, wait for next tick to let drops appear and transition logic run
+            if (droppedAny) return;
+        }
+
+        // If creep is empty of non-energy, attempt to withdraw non-energy from terminal
+        // Find next resource on the terminal to remove
+        const nextRes = (proc && proc.resources ? proc.resources as ResourceConstant[] : []).find((r: ResourceConstant) => terminal.store.getUsedCapacity(r as ResourceConstant) > 0);
+        if (!nextRes) {
+            // Nothing left to remove, move to energy transfer phase
+            const p = memAny._terminalRefill;
+            if (p) p.phase = 'transfer_energy';
+            this.phaseTransferEnergyToTerminal();
+            return;
+        }
+
+        // Amount to withdraw is limited by creep free capacity and terminal amount
+        const freeCap = this.creep.store.getFreeCapacity();
+        if (freeCap === 0) {
+            // No capacity to withdraw; try to drop (should have been handled above)
+            const p = memAny._terminalRefill;
+            if (p) p.phase = 'transfer_energy';
+            this.phaseTransferEnergyToTerminal();
+            return;
+        }
+
+        const amountAvailable = terminal.store.getUsedCapacity(nextRes);
+        const amountToWithdraw = Math.min(freeCap, amountAvailable);
+
+        if (!this.creep.pos.isNearTo(terminal.pos)) {
+            this.creep.travelTo(terminal.pos, { reusePath: 25 });
+            this.creep.say(`📥 T:${nextRes}`);
+            return;
+        }
+
+        const res = this.creep.withdraw(terminal, nextRes, amountToWithdraw);
+        if (res === OK) {
+            this.creep.say(`📥 Took ${nextRes}`);
+            return;
+        } else if (res === ERR_NOT_ENOUGH_RESOURCES) {
+            // Resource gone, recompute next iteration
+            return;
+        } else if (res === ERR_FULL) {
+            // Should not happen because we checked freeCap, but fallback to drop
+            const p = memAny._terminalRefill;
+            if (p) p.phase = 'transfer_energy';
+            this.phaseTransferEnergyToTerminal();
+            return;
+        } else if (res === ERR_NOT_IN_RANGE) {
+            this.creep.travelTo(terminal.pos, { reusePath: 25 });
+            return;
+        } else {
+            // Unexpected error: abort process
+            console.log(`[GroundSupport:${this.room.name}] withdraw from terminal failed: ${res}`);
+            this.clearTerminalRefill();
+            return;
+        }
+    }
+
+    private phaseTransferEnergyToTerminal(): void {
+        if (!this.creep || !this.room.storage) return;
+        const terminal = this.room.terminal;
+        if (!terminal) { this.clearTerminalRefill(); return; }
+
+        // If creep is currently carrying any non-energy resources, we must drop them first.
+        // This can happen if we transitioned to transfer while the creep still held non-energy.
+        try {
+            const memAny = this.room.memory as any;
+            const carriedTotal = this.creep.store.getUsedCapacity();
+            const carriedEnergy = this.creep.store.getUsedCapacity(RESOURCE_ENERGY);
+            if (carriedTotal > 0 && carriedTotal - carriedEnergy > 0) {
+                // force go back to withdraw/drop phase so the creep drops its carried items
+                if (memAny && memAny._terminalRefill) memAny._terminalRefill.phase = 'withdraw_and_drop';
+                console.log(`[GroundSupport:${this.room.name}] transfer phase invoked but creep carrying non-energy; reverting to withdraw_and_drop`);
+                this.phaseWithdrawAndDrop();
+                return;
+            }
+        } catch (e) {
+            // defensive
+        }
+
+        const energyNeeded = Math.max(0, 30000 - terminal.store.getUsedCapacity(RESOURCE_ENERGY));
+        if (energyNeeded <= 0) {
+            // proceed to pickup dropped resources
+            const memAny = this.room.memory as any;
+            const p = memAny._terminalRefill;
+            if (p) p.phase = 'pickup';
+            return;
+        }
+
+        // If creep has energy, transfer to terminal
+        const creepEnergy = this.creep.store.getUsedCapacity(RESOURCE_ENERGY);
+        if (creepEnergy > 0) {
+            // Move to terminal and transfer
+            if (!this.creep.pos.isNearTo(terminal.pos)) {
+                this.creep.travelTo(terminal.pos, { reusePath: 25 });
+                this.creep.say(`📤 →T`);
+                return;
+            }
+            const amount = Math.min(creepEnergy, energyNeeded);
+            const res = this.creep.transfer(terminal, RESOURCE_ENERGY, amount);
+            if (res === OK) {
+                this.creep.say(`📤 Sent ${amount}`);
+                return;
+            } else if (res === ERR_FULL) {
+                // Terminal full unexpectedly
+                const memAny = this.room.memory as any;
+                const p = memAny._terminalRefill;
+                if (p) p.phase = 'pickup';
+                return;
+            } else if (res === ERR_NOT_IN_RANGE) {
+                this.creep.travelTo(terminal.pos, { reusePath: 25 });
+                return;
+            } else {
+                console.log(`[GroundSupport:${this.room.name}] transfer to terminal failed: ${res}`);
+                this.clearTerminalRefill();
+                return;
+            }
+        }
+
+        // Else, creep needs to withdraw energy from storage to shuttle
+        const storageEnergy = this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
+        if (storageEnergy === 0) {
+            // No energy to move - abort
+            console.log(`[GroundSupport:${this.room.name}] storage has no energy for refill phase.`);
+            this.clearTerminalRefill();
+            return;
+        }
+
+        const freeCap = this.creep.store.getFreeCapacity();
+        if (freeCap === 0) {
+            // No room to withdraw; try to go to terminal to dump non-energy or energy
+            const memAny = this.room.memory as any;
+            const p = memAny._terminalRefill;
+            if (p) p.phase = 'transfer_energy';
+            return;
+        }
+
+        const amountToWithdraw = Math.min(freeCap, storageEnergy, energyNeeded);
+        if (!this.creep.pos.isNearTo(this.room.storage.pos)) {
+            this.creep.travelTo(this.room.storage.pos, { reusePath: 25 });
+            this.creep.say(`📥 S:${amountToWithdraw}`);
+            return;
+        }
+
+        const res = this.creep.withdraw(this.room.storage, RESOURCE_ENERGY, amountToWithdraw);
+        if (res === OK) {
+            this.creep.say(`📥 Got ${amountToWithdraw}`);
+            return;
+        } else if (res === ERR_NOT_ENOUGH_RESOURCES) {
+            // Storage didn't have enough; will retry next tick
+            return;
+        } else if (res === ERR_NOT_IN_RANGE) {
+            this.creep.travelTo(this.room.storage.pos, { reusePath: 25 });
+            return;
+        } else {
+            console.log(`[GroundSupport:${this.room.name}] withdraw from storage failed: ${res}`);
+            this.clearTerminalRefill();
+            return;
+        }
+    }
+
+    private phasePickupAndStore(): void {
+        if (!this.creep || !this.room.storage) return;
+        const terminal = this.room.terminal;
+        if (!terminal) { this.clearTerminalRefill(); return; }
+
+        // First check if there are any dropped resources at/near the terminal
+        const drops = this.room.find(FIND_DROPPED_RESOURCES, {
+            filter: d => d.pos.inRangeTo(terminal.pos, 3)
+        }) as Resource[];
+
+        // If creep is carrying anything (non-energy drops), try to deposit to storage
+        if (this.creep.store.getUsedCapacity() > 0) {
+            // Prefer depositing to storage
+            if (!this.creep.pos.isNearTo(this.room.storage.pos)) {
+                this.creep.travelTo(this.room.storage.pos, { reusePath: 25 });
+                this.creep.say(`📦→Stor`);
+                return;
+            }
+
+            // Transfer each resource type carried back to storage
+            for (const resType in this.creep.store) {
+                 const amt = this.creep.store.getUsedCapacity(resType as ResourceConstant);
+                 if (amt > 0) {
+                    const r = this.creep.transfer(this.room.storage, resType as ResourceConstant, amt);
+                    if (r === OK) {
+                        this.creep.say(`📥 Stored ${resType}`);
+                        return;
+                    } else if (r === ERR_FULL) {
+                        // Storage is full: drop what we are carrying on the ground and end the procedure
+                        console.log(`[GroundSupport:${this.room.name}] storage full while depositing picked up drops — dropping carried items and ending refill.`);
+                        // Drop each carried resource so it remains on the ground
+                        for (const dropType in this.creep.store) {
+                            const dropAmt = this.creep.store.getUsedCapacity(dropType as ResourceConstant);
+                            if (dropAmt > 0) {
+                                const dropped = this.creep.drop(dropType as ResourceConstant, dropAmt);
+                                if (dropped === OK) {
+                                    console.log(`[GroundSupport:${this.room.name}] dropped ${dropType} x${dropAmt}`);
+                                } else {
+                                    console.log(`[GroundSupport:${this.room.name}] failed to drop ${dropType}: ${dropped}`);
+                                }
+                            }
+                        }
+                        // End the refill process and leave drops on ground
+                        this.clearTerminalRefill();
+                        return;
+                     } else if (r === ERR_NOT_IN_RANGE) {
+                         this.creep.travelTo(this.room.storage.pos, { reusePath: 25 });
+                         return;
+                     } else {
+                         console.log(`[GroundSupport:${this.room.name}] transfer to storage failed: ${r}`);
+                         this.clearTerminalRefill();
+                         return;
+                     }
+                  }
+              }
+          }
+
+         if (drops.length === 0) {
+              // Nothing to pick up -> complete process
+              this.clearTerminalRefill();
+              this.creep.say(`✅ Refill done`);
+              return;
+          }
+
+         // Pick up the nearest drop (prefer non-energy first to restore them)
+         const nonEnergyDrop = drops.find(d => d.resourceType !== RESOURCE_ENERGY);
+         const pick = nonEnergyDrop || drops[0];
+
+         // If storage is full, do NOT pick up drops — end the procedure and leave them on the ground.
+         try {
+            if (this.room.storage && this.room.storage.store.getFreeCapacity() === 0) {
+                console.log(`[GroundSupport:${this.room.name}] storage full, ending terminal-refill without picking up drops.`);
+                this.clearTerminalRefill();
+                return;
+            }
+        } catch (e) {
+            // defensive - ignore
+        }
+
+         if (!this.creep.pos.isNearTo(pick.pos)) {
+             this.creep.travelTo(pick.pos, { reusePath: 25 });
+             this.creep.say(`📦 Pick ${pick.resourceType}`);
+             return;
+         }
+         const res = this.creep.pickup(pick);
+         if (res === OK) {
+             this.creep.say(`📦 Got ${pick.resourceType}`);
+             return;
+         } else if (res === ERR_FULL) {
+             // Carrying capacity full, deposit to storage next tick
+             return;
+         } else {
+            // Unexpected failure, try next drop
+             return;
+         }
+     }
+
+     private detectTerminalStuckCondition(): { resources: ResourceConstant[] } | null {
+         const terminal = this.room.terminal;
+         if (!terminal || !this.room.storage) return null;
+
+        // Case A (existing): Storage must be completely full (no free capacity)
+        // and terminal must have insufficient energy (<30k) while containing non-energy resources.
+        const storageFree = this.room.storage.store.getFreeCapacity();
+        const terminalEnergy = terminal.store.getUsedCapacity(RESOURCE_ENERGY);
+
+        const nonEnergyResources: ResourceConstant[] = [];
+        for (const r in terminal.store) {
+            if (r === RESOURCE_ENERGY) continue;
+            const amt = terminal.store.getUsedCapacity(r as ResourceConstant);
+            if (amt > 0) nonEnergyResources.push(r as ResourceConstant);
+        }
+
+         if (nonEnergyResources.length === 0) return null;
+
+         if (storageFree === 0 && terminalEnergy < 30000) {
+             return { resources: nonEnergyResources };
+         }
+
+         // Case B (new): Terminal is completely full (no free capacity) and has ZERO energy
+         // but is full of non-energy resources. In this case, if storage has any energy available
+         // we should also initiate the same terminal-refill process so the creep will remove
+         // non-energy to free space and allow energy to be moved into the terminal.
+         const terminalFree = terminal.store.getFreeCapacity();
+         const storageEnergyAvailable = this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
+         if (terminalFree === 0 && terminalEnergy === 0 && storageEnergyAvailable > 0) {
+             return { resources: nonEnergyResources };
+         }
+
+         return null;
+      }
+
+      // Clear the terminal refill process from room memory
+      private clearTerminalRefill(): void {
+         try {
+             const memAny = this.room.memory as any;
+             if (memAny && memAny._terminalRefill) {
+                 delete memAny._terminalRefill;
+                 console.log(`[GroundSupport:${this.room.name}] terminal-refill: cleared`);
+             }
+         } catch (e) {
+             // swallow
+         }
+     }
+
+ } // end class GroundSupport

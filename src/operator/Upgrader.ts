@@ -110,7 +110,9 @@ export class Upgrader extends Operator {
         } else {
             // Goto and upgrade controller
             if (this.room.controller) {
-                this.creep.upgradeController(this.room.controller);
+                if (this.creep.upgradeController(this.room.controller) == ERR_NOT_IN_RANGE) {
+                    this.creep.moveTo(this.room.controller);
+                }
                 this.creep.say('🔨');
                 return;
             }

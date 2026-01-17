@@ -136,10 +136,14 @@ export class EnergyManagement extends Operation {
     roleCall() {
         // Let's determine if we need any spawns.
 
-        let holding = false;
-        for (let operationOperator of this.operationOperators) {
-            var creepOperator = Game.creeps[operationOperator.name];
+        let holding: { [key: string]: boolean } = {};
 
+        for (let operationOperator of this.operationOperators) {
+            if (holding[operationOperator.room.name] == undefined) {
+                holding[operationOperator.room.name] = false;
+            }
+
+            var creepOperator = Game.creeps[operationOperator.name];
 
             if (creepOperator) {
                 // alive
@@ -165,9 +169,8 @@ export class EnergyManagement extends Operation {
                         }
                         if (controllerLevel <=3) { continue; }
                         if (controllerLevel > 8 && spawn.room.storage && spawn.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 800000) { continue; }
-                        if (holding) { continue; }
+                        if (holding[operationOperator.room.name]) { continue; }
                         if (!spawn.spawning) {
-
                             if (operationOperator instanceof Harvester) {
                                 let min = 6;
                                 if (spawn.room.storage && spawn.room.storage?.store.getUsedCapacity(RESOURCE_ENERGY) < 1000) {
@@ -184,7 +187,8 @@ export class EnergyManagement extends Operation {
                                 let result = spawn.spawnCreep(operatorParts, operationOperator.name, { directions: spawnDirection});
                                 console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + result);
                                 if (result == ERR_NOT_ENOUGH_RESOURCES) {
-                                    holding = true;
+                                    console.log(`    HOLDING: ` +  operationOperator.name + ` Waiting on resources`);
+                                    holding[operationOperator.room.name] = true;
                                 }
 
                             } else if (operationOperator instanceof Upgrader) {
@@ -226,21 +230,20 @@ export class EnergyManagement extends Operation {
 
                 // New employement
                 if (operationOperator instanceof Field) {
+
                     const cfgField = RoomHelper.getRoomConfig(operationOperator.room);
                     const fieldKey = 'field' + operationOperator.memory.fieldindex;
                     const fieldCfg = cfgField && cfgField[fieldKey];
-                    if (fieldCfg && fieldCfg.spawn && fieldCfg.levels && operationOperator.room.controller && fieldCfg.levels.includes(operationOperator.room.controller.level)) {
 
-                        let spawnX = fieldCfg.spawn.x;
-                        let spawnY = fieldCfg.spawn.y;
+                    if (fieldCfg && fieldCfg.levels && operationOperator.room.controller && fieldCfg.levels.includes(operationOperator.room.controller.level)) {
 
                         let spawn = operationOperator.room.find<StructureSpawn>(FIND_MY_STRUCTURES, {
                             filter: function(object) {
                                 return object.structureType === STRUCTURE_SPAWN &&
-                                       object.pos.x === spawnX &&
-                                       object.pos.y === spawnY;
+                                       object.spawning == null
                             }
                         })[0];
+
                         if (spawn && operationOperator.room.storage && operationOperator.room.storage?.store.getUsedCapacity(RESOURCE_ENERGY) > 4000) {
 
                             let workParts = Math.min(6, Math.max(3, Math.floor((operationOperator.room.energyAvailable) / 100)));

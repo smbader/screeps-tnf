@@ -39,6 +39,12 @@ export class GeoMiningCompany extends Operation {
             const mineral = room.find(FIND_MINERALS)[0];
             if (!mineral) continue;
             if (mineral.mineralAmount === 0 && mineral.ticksToRegeneration && mineral.ticksToRegeneration > 0) continue;
+            // Only spawn if the room has less than 100k of this resource.
+            const resourceType = mineral.mineralType;
+            const storedAmount =
+                (room.storage?.store?.[resourceType] || 0) +
+                (room.terminal?.store?.[resourceType] || 0);
+            if (storedAmount >= 100000) continue;
 
             // Ensure extractor exists
             const hasExtractor = mineral.pos.lookFor(LOOK_STRUCTURES)

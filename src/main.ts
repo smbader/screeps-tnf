@@ -209,7 +209,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
   for (let operation of operations) {
     // Takes evalution of what operation and tasks are needed.
       try {
-          console.log('INIT: ' + operation.name);
+          ////console.log('INIT: ' + operation.name);
           operation.init();
           if (Game.shard.name == 'shard3') {
               //console.log(`INIT ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
@@ -224,7 +224,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
   /////console.log(`********  Operation Rolecall and Spawn  ********`);
   for (let operation of operations) {
       try {
-          console.log('ROLECALL: ' + operation.name);
+          ////console.log('ROLECALL: ' + operation.name);
           operation.roleCall();
           if (Game.shard.name == 'shard3') {
               //console.log(`ROLECALL ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
@@ -240,7 +240,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
     let ct = 1;
   for (let operation of operations) {
       try {
-          console.log('ACTION: ' + operation.name);
+          ////console.log('ACTION: ' + operation.name);
           operation.actions();
       } catch (e) {
           console.log(e);

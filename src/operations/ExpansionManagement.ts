@@ -9,10 +9,10 @@ export class ExpansionManagement extends Operation {
 
     operationOperators: Operator[];
     expansionRooms: any[] = [
-        { target: 'E28S1', source: 'E31N1', forcespawn: true, waypoints: [] },
-        { target: 'E37S1', source: 'E31N1', forcespawn: true, waypoints: [] },
-        { target: 'E33N5', source: 'E31N3', forcespawn: true, waypoints: [] },
-        { target: 'E32N4', source: 'E31N3', forcespawn: true, waypoints: [] },
+        //{ target: 'E28S1', source: 'E31N1', forcespawn: true, waypoints: [] },
+        //{ target: 'E37S1', source: 'E31N1', forcespawn: true, waypoints: [] },
+        //{ target: 'E33N5', source: 'E31N3', forcespawn: true, waypoints: [] },
+        //{ target: 'E32N4', source: 'E31N3', forcespawn: true, waypoints: [] },
     ];
 
     constructor() {

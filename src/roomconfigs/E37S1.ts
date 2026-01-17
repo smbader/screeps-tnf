@@ -8,6 +8,7 @@ export class E37S1 {
             "roomtemplate": "ricane",
             "roomanchor": {"x": 32, "y": 14},
             "templaterotation": 0,
+            "controllerLink": {"x": 37, "y": 12},
             "energysources": [
                 {
                     "id": "59830013b097071b4adc3bba",

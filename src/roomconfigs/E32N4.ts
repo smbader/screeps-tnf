@@ -7,6 +7,7 @@ export class E32N4 {
             "roomtemplate": "ricane",
             "roomanchor": {"x": 12, "y": 23},
             "templaterotation": 0,
+            "controllerLink": {"x": 12, "y": 35},
             "energysources": [
                 {
                     "id": "5982ffceb097071b4adc3387",

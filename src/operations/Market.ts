@@ -30,6 +30,18 @@ const SELL_DEAL_AMOUNT = 1000;
 const ENERGY_COST_PER_UNIT = 15;
 const PRICE_HISTORY_LENGTH = 20; // number of ticks to average
 
+// Throttle console logs so we don't spam the console every tick
+const LOG_THROTTLE = 1; // only emit detailed logs every N ticks
+
+function marketLog(message: string, roomName?: string) {
+    const prefix = `[Market ${Game.time}]`;
+    if (roomName) {
+        console.log(`${prefix} [${roomName}] ${message}`);
+    } else {
+        console.log(`${prefix} ${message}`);
+    }
+}
+
 function recordPrice(resource: string, price: number) {
     if (!Memory.marketPriceHistory) Memory.marketPriceHistory = {};
     if (!Memory.marketPriceHistory[resource]) Memory.marketPriceHistory[resource] = [];
@@ -65,115 +77,80 @@ export class Market extends Operation {
 
     public actions() {
         if (Game.cpu.bucket < CPU_BUCKET_MIN) {
-            if (Game.time % 100 === 0) console.log('No market, CPU Bucket low: ' + Game.cpu.bucket);
+            if (Game.time % 100 === 0) marketLog('No market, CPU Bucket low: ' + Game.cpu.bucket);
             return;
         }
         if (Game.market.credits < MIN_CREDITS) {
-            if (Game.time % 100 === 0) console.log('No more spending, credit reserve limit.');
+            if (Game.time % 100 === 0) marketLog('No more spending, credit reserve limit. credits=' + Game.market.credits);
             return;
         }
 
-        /*
-                // --- BUY ENERGY ---
-                for (const room of Object.values(Game.rooms)) {
-                    if (room.controller?.owner?.username !== "ricane") continue;
-                    if (!(room.memory.nextTrade < Game.time)) continue;
-                    room.memory.nextTrade = Game.time + 50;
+        //if (Game.time % LOG_THROTTLE === 0) marketLog('Running market actions');
 
-                    if (!(room.storage && room.terminal)) continue;
+        // Aggregate stats for better visibility
+        const stats = {
+            totalRooms: 0,
+            processedRooms: 0,
+            skippedRooms: 0,
+            skipReasons: {} as Record<string, number>,
+            deals: 0,
+            failedDeals: 0,
+            revenue: 0,
+        };
+        function addSkip(reason: string) {
+            stats.skippedRooms++;
+            stats.skipReasons[reason] = (stats.skipReasons[reason] || 0) + 1;
+        }
 
-                    const totalEnergy = room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) + room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
-                    const terminalFree = room.terminal.store.getFreeCapacity();
-                    const storageFree = room.storage.store.getFreeCapacity();
-                    const maxBuy = Math.min(ENERGY_BUY_LIMIT, terminalFree, storageFree);
-
-                    if (!(totalEnergy < 300000 && storageFree > 20000 && terminalFree > 20000)) continue;
-                    if (maxBuy < 1000) continue; // avoid overbuying
-
-                    let bestOrder: Order | undefined;
-                    let bestExpense = Number.MAX_VALUE;
-                    const orders = Game.market.getAllOrders({type: ORDER_SELL, resourceType: RESOURCE_ENERGY});
-                    for (const order of orders) {
-                        if (!order.roomName || order.remainingAmount < 100) continue;
-                        const transferCost = Game.market.calcTransactionCost(100, room.name, order.roomName) / 100;
-                        const expense = order.price + transferCost * RESOURCE_VALUE.energy;
-                        if (expense < bestExpense) {
-                            bestExpense = expense;
-                            bestOrder = order;
-                        }
-                    }
-
-                    // --- Smarter price comparison ---
-                    const avgEnergyPrice = getAvgPrice(RESOURCE_ENERGY);
-                    if (bestOrder) {
-                        const amount = Math.min(bestOrder.remainingAmount, maxBuy, 30000);
-                        recordPrice(RESOURCE_ENERGY, bestOrder.price);
-                        if ((bestExpense <= avgEnergyPrice * 1.10) || totalEnergy < ENERGY_DEAL_MIN) {
-                            // Only buy if expense is within 10% of our rolling average, or we're desperate
-                            const outcome = Game.market.deal(bestOrder.id, amount, room.name);
-                            console.log(`[${room.name}] bought ${amount} energy from ${bestOrder.roomName}, price: ${bestOrder.price.toFixed(3)}, avg: ${avgEnergyPrice.toFixed(3)}, outcome: ${outcome}`);
-                        } else if (Game.time % 100 === 0) {
-                            console.log(`[${room.name}] NO ENERGY PURCHASE. price: ${bestOrder.price.toFixed(3)}, avg: ${avgEnergyPrice.toFixed(3)}`);
-                        }
-                    }
-                }
-                // --- BUY NEEDED RAW MINERALS ---
-                for (const room of Object.values(Game.rooms)) {
-                    if (room.controller?.owner?.username !== "ricane") continue;
-                    if (!room.terminal || !room.storage) continue;
-
-                    for (const mineral of Object.keys(TERMINAL_GOALS) as ResourceConstant[]) {
-                        if (mineral === "energy") continue;
-                        // @ts-ignore
-                        const needed = TERMINAL_GOALS[mineral] - (
-                            (room.storage.store.getUsedCapacity(mineral) || 0) +
-                            (room.terminal.store.getUsedCapacity(mineral) || 0)
-                        );
-                        // Avoid overbuying: don't buy if not enough space, and only if missing significant amount
-                        const terminalFree = room.terminal.store.getFreeCapacity();
-                        const storageFree = room.storage.store.getFreeCapacity();
-                        const maxBuy = Math.min(needed, terminalFree, storageFree, 2000);
-                        if (maxBuy < 500) continue;
-
-                        let bestOrder: Order | undefined;
-                        let bestExpense = Number.MAX_VALUE;
-                        const orders = Game.market.getAllOrders({ type: ORDER_SELL, resourceType: mineral });
-                        for (const order of orders) {
-                            if (!order.roomName || order.remainingAmount < 100) continue;
-                            const transferCost = Game.market.calcTransactionCost(100, room.name, order.roomName) / 100;
-                            // @ts-ignore
-                            const expense = order.price + transferCost * (RESOURCE_VALUE[mineral] || 1);
-                            if (expense < bestExpense) {
-                                bestExpense = expense;
-                                bestOrder = order;
-                            }
-                        }
-
-                        // --- Smarter price comparison ---
-                        const avgMineralPrice = getAvgPrice(mineral);
-                        if (bestOrder && bestExpense <= avgMineralPrice * 1.15) {
-                            // Buy if within 15% of rolling average for this mineral
-                            const amount = Math.min(bestOrder.remainingAmount, maxBuy);
-                            recordPrice(mineral, bestOrder.price);
-                            const outcome = Game.market.deal(bestOrder.id, amount, room.name);
-                            console.log(`[${room.name}] bought ${amount} ${mineral} from ${bestOrder.roomName}, price: ${bestOrder.price.toFixed(3)}, avg: ${avgMineralPrice.toFixed(3)}, outcome: ${outcome}`);
-                        }
-                    }
-                }
-        */
         // --- SELL MINERALS ---
         for (const room of Object.values(Game.rooms)) {
-            if (room.controller?.owner?.username !== "ricane") continue;
-            if ((room.memory.nextTrade - Game.time) % 100 !== 0) continue;
-            if (!(room.storage && room.terminal) || room.terminal.cooldown > 0) continue;
+            stats.totalRooms++;
+            // Log quick reason when throttled if we skip rooms
+            const owner = room.controller?.owner?.username;
+            if (owner !== "ricane") {
+                addSkip('owner');
+                //if (Game.time % LOG_THROTTLE === 0) marketLog(`skipped: owner=${owner || 'none'}`, room.name);
+                continue;
+            }
+
+            const nextTrade = room.memory.nextTrade || 0;
+            if ((nextTrade - Game.time) % 15 !== 0) {
+                addSkip('schedule');
+                //if (Game.time % LOG_THROTTLE === 0) marketLog(`skipped: nextTrade schedule nextTrade=${(nextTrade - Game.time) % 15}`, room.name);
+                continue;
+            }
+
+            if (!(room.storage && room.terminal)) {
+                addSkip('no-terminal');
+                //if (Game.time % LOG_THROTTLE === 0) marketLog('skipped: missing storage or terminal', room.name);
+                continue;
+            }
+
+            if (room.terminal.cooldown > 0) {
+                addSkip('terminal-cooldown');
+                //if (Game.time % LOG_THROTTLE === 0) marketLog(`skipped: terminal cooldown ${room.terminal.cooldown}`, room.name);
+                continue;
+            }
 
             const totalEnergy = room.terminal.store.getUsedCapacity(RESOURCE_ENERGY);
-            if (totalEnergy < 30000) continue;
+            if (totalEnergy < 30000) {
+                addSkip('low-energy');
+                //if (Game.time % LOG_THROTTLE === 0) marketLog(`skipped: terminal energy too low (${totalEnergy})`, room.name);
+                continue;
+            }
+
+            stats.processedRooms++;
+            //if (Game.time % LOG_THROTTLE === 0) marketLog(`processing: terminalEnergy=${totalEnergy}, terminalFree=${room.terminal.store.getFreeCapacity()}, storageFree=${room.storage.store.getFreeCapacity()}`, room.name);
 
             for (const resourceType of RESOURCES_ALL as ResourceConstant[]) {
                 if (resourceType === RESOURCE_ENERGY || resourceType === RESOURCE_POWER) continue;
                 const quantity = room.terminal.store.getUsedCapacity(resourceType);
-                if (quantity <= 10000) continue;
+                if (quantity <= 10000) {
+                    if (Game.time % LOG_THROTTLE === 0 && quantity > 0) marketLog(`resource ${resourceType} quantity ${quantity} below sell threshold`, room.name);
+                    // track as a resource-level skip for visibility
+                    if (quantity > 0) stats.skipReasons[`resource-low-${resourceType}`] = (stats.skipReasons[`resource-low-${resourceType}`] || 0) + 1;
+                    continue;
+                }
 
                 let doNotSell = false;
                 // (Optional: implement internal transfer here)
@@ -192,19 +169,59 @@ export class Market extends Operation {
                         bestOrder = order;
                     }
                 }
+
+                // If there's a profitable bestOrder, or if we have >30k of this resource, attempt a sale.
+                if (!bestOrder && quantity > 30000) {
+                    // pick the highest-price buyer with enough remaining amount
+                    for (const o of orders) {
+                        if (!o.roomName || o.remainingAmount < SELL_DEAL_AMOUNT) continue;
+                        if (!bestOrder || o.price > bestOrder.price) bestOrder = o;
+                    }
+                    if (Game.time % LOG_THROTTLE === 0) marketLog(`no profitable order found for ${resourceType}; forcing selection because qty=${quantity}`, room.name);
+                }
+
                 if (bestOrder) {
+                    if (Game.time % LOG_THROTTLE === 0) marketLog(`selected buyer ${bestOrder.roomName} price=${bestOrder.price.toFixed(3)} remaining=${bestOrder.remainingAmount} estimatedGain=${highestGain.toFixed(2)}`, room.name);
+                    // Ensure TypeScript knows roomName is present (we filtered orders earlier for roomName)
+                    if (!bestOrder.roomName) {
+                        if (Game.time % LOG_THROTTLE === 0) marketLog(`skipping bestOrder with no roomName`, room.name);
+                        continue;
+                    }
+                    const buyerRoom = bestOrder.roomName as string;
                     const amount = Math.min(bestOrder.remainingAmount, SELL_DEAL_AMOUNT, quantity);
+                    // compute estimated profit and record price history
+                    const transferCost = Game.market.calcTransactionCost(amount, room.name, buyerRoom) * ENERGY_COST_PER_UNIT;
+                    const incoming = bestOrder.price * amount;
+                    const net = incoming - transferCost;
                     recordPrice(resourceType, bestOrder.price);
                     const outcome = Game.market.deal(bestOrder.id, amount, room.name);
                     if (outcome === OK) {
+                        stats.deals++;
+                        stats.revenue += net;
+                        marketLog(`sold ${amount} ${resourceType} to ${bestOrder.roomName} @${bestOrder.price.toFixed(3)} net=${net.toFixed(2)}`, room.name);
                         console.log(`[${room.name}] sold ${amount} ${resourceType} to ${bestOrder.roomName}, price: ${bestOrder.price.toFixed(3)}, outcome: ${outcome}`);
+                    } else {
+                        stats.failedDeals++;
+                        // Log forced sale attempts separately
+                        if (quantity > 3000) {
+                            marketLog(`forced-sell attempt ${amount} ${resourceType} to ${bestOrder?.roomName || 'unknown'}, price: ${bestOrder?.price?.toFixed?.(3) || 'n/a'}, outcome: ${outcome}`, room.name);
+                        }
                     }
+                } else {
+                    if (Game.time % LOG_THROTTLE === 0) marketLog(`no buyer found for ${resourceType} (qty=${quantity})`, room.name);
+                    stats.skipReasons[`no-buyer-${resourceType}`] = (stats.skipReasons[`no-buyer-${resourceType}`] || 0) + 1;
                 }
-            }
+             }
+         }
+
+        // Summary log for SELL MINERALS
+        if (Game.time % LOG_THROTTLE === 0 && stats.deals > 0) {
+            const reasonEntries = Object.entries(stats.skipReasons).map(([k, v]) => `${k}:${v}`).join(', ');
+            marketLog(`market summary rooms=${stats.totalRooms} processed=${stats.processedRooms} skipped=${stats.skippedRooms} deals=${stats.deals} failed=${stats.failedDeals} netRevenue=${stats.revenue.toFixed(2)} skips=${reasonEntries}`);
         }
 
 
-        // --- NETWORK BALANCE ENERGY ---
+         // --- NETWORK BALANCE ENERGY ---
         for (const room of Object.values(Game.rooms)) {
             if (room.controller?.owner?.username !== "ricane") continue;
             if (!room.memory.data.terminal) room.memory.data.terminal = { energy: 0 };
