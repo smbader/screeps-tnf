@@ -24,7 +24,7 @@ type Type_Operation_Classes = {
 const OPERATION_CLASSES: Type_Operation_Classes = {
     market: Market,                             // 5
     //remoteattack: RemoteAttack,
-    //powerharvestoperation: PowerHarvestOperation,                 // 6
+    powerharvestoperation: PowerHarvestOperation,                 // 6
     expansionmanagement: ExpansionManagement,   // 8
     remotefarming: RemoteFarming,               // 7
     roomdefense: RoomDefense,                   // 3
