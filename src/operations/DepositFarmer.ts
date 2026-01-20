@@ -8,7 +8,7 @@ export class DepositFarmer extends Operation {
 
     operationOperators:Operator[];
     depositRooms:any[] = [
-        { target: 'E30N1', source: 'E31N1', 'shard': 'shard1' },
+        { target: 'E30N1', source: 'E31N0', 'shard': 'shard1' },
     ];
 
     constructor() {
@@ -26,14 +26,14 @@ export class DepositFarmer extends Operation {
                 continue;
             }
 
-            if (!Game.rooms[depositRoom.target]) {
+            if (!Game.rooms[depositRoom.target] && sourceRoom) {
                 let observers = sourceRoom.find<StructureObserver>(FIND_MY_STRUCTURES, {
                     filter: structure => (structure.structureType == STRUCTURE_OBSERVER)
                 });
                 if (observers.length > 0) {
                     let observer = observers[0];
                     observer.observeRoom(depositRoom.target);
-                    //console.log('[' + sourceRoom.name + '] scanning room [' + depositRoom.target + ']');
+                    console.log('[' + sourceRoom.name + '] scanning room [' + depositRoom.target + ']');
                 }
             }
 

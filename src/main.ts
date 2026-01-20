@@ -4,6 +4,9 @@ import { OperationHelper } from "utils/OperationHelper";
 import { RoomHelper } from "utils/RoomHelper";
 import { TravelToOptions, Traveler } from "utils/Traveler";
 
+// Module load-time log (runs when the compiled bundle is loaded by Screeps)
+try { console.log(`screeps-tnf: main module loaded at ${new Date().toISOString()}`); } catch (e) {}
+
 declare global {
     interface Memory {
         uuid: number;
@@ -180,6 +183,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
         return traveler.travelTo(this, {pos: destination}, options);
     };
 
+    // Very early debug: confirm main loop is executing
+    try { console.log(`Main loop tick ${Game.time} starting. CPU bucket=${Game.cpu.bucket}`); } catch (e) {}
+
     // Automatically delete memory of missing creeps
     for (const name in Memory.creeps) {
         if (!(name in Game.creeps)) {
@@ -187,6 +193,11 @@ export const loop = ErrorMapper.wrapLoop(() => {
         }
     }
 
+    // Debug: count owned rooms
+    try {
+        const ownedRooms = Object.values(Game.rooms).filter(r => r.controller && r.controller.my).map(r => r.name);
+        console.log(`Owned rooms: ${ownedRooms.length} ${ownedRooms.join(', ')}`);
+    } catch (e) {}
 
   // Display current game tick to the console.
   //console.log(`Current game tick is ${Game.time}`);
@@ -201,15 +212,26 @@ export const loop = ErrorMapper.wrapLoop(() => {
         return;
     }
 
+  // Ensure per-room powerHarvest memory exists before operations run so PowerHarvestOperation
+  // can rely on room.memory.powerHarvest being present during init/roleCall/actions.
+  for (var rid in Memory.rooms) {
+      const r = Game.rooms[rid];
+      if (!r) continue;
+      if (r.controller?.owner?.username !== 'ricane') continue;
+      if (!r.memory.powerHarvest) r.memory.powerHarvest = { banks: [], lastScan: 0 } as PowerHarvestMemory;
+      if (!r.memory.powerHarvest.scannedRooms) r.memory.powerHarvest.scannedRooms = {};
+  }
+
   // Load system level tasks for game
   let operations = OperationHelper.getOperations()
+  try { console.log(`Instantiated ${operations.length} operations: ${operations.map(op => op.name).join(', ')}`); } catch(e) {}
 
   /////console.log(` `);
   /////console.log(`********  Operation Initialization  ********`);
   for (let operation of operations) {
     // Takes evalution of what operation and tasks are needed.
       try {
-          ////console.log('INIT: ' + operation.name);
+          //console.log('INIT: ' + operation.name);
           operation.init();
           if (Game.shard.name == 'shard3') {
               //console.log(`INIT ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
@@ -224,7 +246,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
   /////console.log(`********  Operation Rolecall and Spawn  ********`);
   for (let operation of operations) {
       try {
-          ////console.log('ROLECALL: ' + operation.name);
+          //console.log('ROLECALL: ' + operation.name);
           operation.roleCall();
           if (Game.shard.name == 'shard3') {
               //console.log(`ROLECALL ${operation.name} : ${(Game.cpu.getUsed() - beforeCpu).toFixed(2)}`);
@@ -240,7 +262,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
     let ct = 1;
   for (let operation of operations) {
       try {
-          ////console.log('ACTION: ' + operation.name);
+          //console.log('ACTION: ' + operation.name);
           operation.actions();
       } catch (e) {
           console.log(e);

@@ -11,7 +11,9 @@ export class PowerFarming extends Operation {
 
     operationOperators:Operator[];
     powerRooms:any[] = [
-        { target: 'W13S0', source: 'W13N2', 'shard': 'shard3' },
+    //    { target: 'E30N1', source: 'E31N1', 'shard': 'shard1' },
+    //    { target: 'E30N0', source: 'E31N1', 'shard': 'shard1' },
+    //    { target: 'E31N0', source: 'E31N1', 'shard': 'shard1' },
     ];
 
     constructor() {
@@ -101,11 +103,11 @@ export class PowerFarming extends Operation {
                                     operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 100000) {
 
                                     let targetRoom = Game.rooms[operationOperator.targetroom];
-
+                                    console.log('106');
                                     let target = targetRoom.find<StructurePowerBank>(FIND_STRUCTURES, {
                                         filter: structure => (structure.structureType == STRUCTURE_POWER_BANK)
                                     });
-
+                                    console.log('110');
                                     if (target.length > 0) {
 
                                         let ps = target[0];
@@ -129,9 +131,11 @@ export class PowerFarming extends Operation {
                                     operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 150000) {
 
                                     let targetRoom = Game.rooms[operationOperator.targetroom];
+                                    console.log('134');
                                     let target = targetRoom.find<StructurePowerBank>(FIND_STRUCTURES, {
                                         filter: structure => (structure.structureType == STRUCTURE_POWER_BANK)
                                     });
+                                    console.log('138');
 
                                     if (target.length > 0) {
 
@@ -144,14 +148,27 @@ export class PowerFarming extends Operation {
                                             else console.log('cant spawn healer ' + result);
                                         }
                                     }
-
                                 }
                             }
-
                         }
                     }
                 }
             }
         }
     }
+
+    public actions() {
+
+        console.log(`--------  Operator PowerFarming Actions  ------`);
+        for (let operationOperator of this.operationOperators) {
+            let cpuStart = Game.cpu.getUsed();
+            operationOperator.actions();
+            let cpuUsed = Game.cpu.getUsed() - cpuStart;
+            if (cpuUsed > 0.5) {
+                //console.log(`    ` + operationOperator.name + `: Actions Complete (cpu used: `+ cpuUsed.toFixed(2) + `)`);
+            }
+        }
+    }
+
+
 }

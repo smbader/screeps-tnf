@@ -20,6 +20,10 @@ export class LabProcesses extends Operation {
             for (const roomid in Game.rooms) {
                 const room = Game.rooms[roomid];
 
+                if (!room) {
+                    continue;
+                }
+
                 // What kind of room are we looking at?
                 if (room.controller?.owner?.username !== "ricane") {
                     continue;
@@ -28,6 +32,7 @@ export class LabProcesses extends Operation {
                 if (((room.memory.nextTrade - Game.time) % 12) != 0) {
                     continue;
                 }
+
 
                 let pss = room.find<StructurePowerSpawn>(FIND_MY_STRUCTURES, {
                     filter: function(object) {

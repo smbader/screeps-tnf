@@ -37,26 +37,28 @@ export class PowerHauler extends Operator {
     }
 
     actions() {
+        console.log('hello?');
         // Creep may not exist yet.
         if (!this.creep) {
             return;
         }
+        console.log(`Actions: ${JSON.stringify(this.creep)}`);
 
         if (this.creep.memory.targetRoom !== this.creep.room.name
             && this.creep.store.getUsedCapacity() == 0 ) {
 
             let roomPos = new RoomPosition(25, 25, this.creep.memory.targetRoom)
-            this.creep.travelTo(roomPos);
+            this.creep.say('' + this.creep.travelTo(roomPos));
             return;
 
 
         } else if (this.creep.store.getUsedCapacity(RESOURCE_POWER) > 0) {
-
+console.log('54');
             let storage = this.room.find<StructureStorage>(FIND_MY_STRUCTURES, {
                 filter: structure => structure.structureType == STRUCTURE_STORAGE &&
                     structure.store.getUsedCapacity() < structure.store.getCapacity()
             })[0];
-
+console.log('59');
             if (this.creep.transfer(storage, RESOURCE_POWER) == ERR_NOT_IN_RANGE) {
                 this.creep.travelTo(storage.pos);
             }
