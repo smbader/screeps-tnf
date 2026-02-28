@@ -1,4 +1,5 @@
 import { Operator } from "../classes/operator";
+import {RoomHelper} from "../utils/RoomHelper";
 
 interface ClaimerMemory extends CreepMemory {
     targetRoom: string;
@@ -55,18 +56,22 @@ export class Claimer extends Operator {
         if (!this.creep) {
             return;
         }
+        const cfg1 = RoomHelper.getRoomConfigByName(this.creep.memory.targetRoom);
 
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.memory.waypoints != undefined) {
             if (this.memory.waypoints[this.creep.memory.waypoint]) {
                 let currentWayPoint = this.memory.waypoints[this.creep.memory.waypoint];
+                console.log(this.creep.name + ' moving to waypoint ' + this.creep.memory.waypoint + ' in room ' + currentWayPoint.room);
                 let wayPointPos = new RoomPosition(currentWayPoint.x, currentWayPoint.y, currentWayPoint.room);
+
+                console.log('shard' + currentWayPoint.shard + ' == ' + Game.shard.name);
                 if ('shard' + currentWayPoint.shard !== Game.shard.name){
                     this.creep.memory.waypoint += 1;
                 } else if (this.creep.pos.getRangeTo(wayPointPos) == 0) {
                     this.creep.memory.waypoint += 1;
                 } else {
-                    this.creep.say(this.creep.travelTo(wayPointPos) + ' ');
+                    this.creep.travelTo(wayPointPos);
                 }
                 return;
             }
@@ -80,10 +85,12 @@ export class Claimer extends Operator {
         }
 
         let claimRoom = Game.rooms[this.creep.memory.targetRoom];
+        const cfg = RoomHelper.getRoomConfigByName(this.creep.memory.targetRoom);
+
         if (claimRoom && claimRoom.controller) {
-            if (this.creep.pos.getRangeTo(claimRoom.controller.pos) < 3) {
+            if (this.creep.pos.getRangeTo(claimRoom.controller.pos) < 2) {
                 let result = 0;
-                if (claimRoom.memory.config?.type == 'owned') {
+                if (cfg?.type == 'owned' || cfg?.type == 'defend') {
                     result = this.creep.claimController(claimRoom.controller);
                     this.creep.say('🔐');
                 } else {

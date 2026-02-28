@@ -7,8 +7,9 @@ export abstract class Operator {
     this.name = name;
   }
 
-
   public actions() {
     return;
   }
+
+
 }

@@ -6,6 +6,9 @@ import { Upgrader } from "../operator/Upgrader";
 import { Field } from "../operator/Field";
 import { RoomHelper } from "../utils/RoomHelper";
 
+// Minimum free energy a recipient link must have to accept transfers from storage link
+const LINK_MIN_FREE_TO_ACCEPT = 100;
+
 export class EnergyManagement extends Operation {
 
     operationOperators:Operator[]
@@ -172,11 +175,8 @@ export class EnergyManagement extends Operation {
                         if (holding[operationOperator.room.name]) { continue; }
                         if (!spawn.spawning) {
                             if (operationOperator instanceof Harvester) {
-                                let min = 6;
-                                if (spawn.room.storage && spawn.room.storage?.store.getUsedCapacity(RESOURCE_ENERGY) < 1000) {
-                                    min = 1;
-                                }
-                                let workParts = Math.min(min, Math.max(6, Math.floor((operationOperator.room.energyCapacityAvailable - 100) / 150)));
+
+                                let workParts = Math.max(1, Math.min(6, Math.floor((operationOperator.room.energyCapacityAvailable - 100) / 150)));
                                 let operatorParts:BodyPartConstant[] = [];
                                 for (let i = 1; i <= workParts;  i++) {
                                     operatorParts.push(WORK);
@@ -358,8 +358,17 @@ export class EnergyManagement extends Operation {
                             continue;
                         }
 
-
-                        storagelink.transferEnergy(targetLink, Math.min(targetLink.store.getFreeCapacity(RESOURCE_ENERGY), storagelink.store.getUsedCapacity(RESOURCE_ENERGY)));
+                        // Ensure targetLink is a StructureLink
+                        const tlink = targetLink as StructureLink;
+                        const targetFree = (tlink.store && tlink.store.getFreeCapacity) ? tlink.store.getFreeCapacity(RESOURCE_ENERGY) : 0;
+                        if (targetFree > LINK_MIN_FREE_TO_ACCEPT) {
+                            storagelink.transferEnergy(tlink, Math.min(targetFree, storagelink.store.getUsedCapacity(RESOURCE_ENERGY)));
+                        } else {
+                            // Skip tiny micro-transfers to nearly-full targets; reset command to inbound so other logic can pick a better destination
+                            console.log(`[EnergyManagement:${room.name}] skipping storagelink -> target ${tlink.id} because free=${targetFree} <= ${LINK_MIN_FREE_TO_ACCEPT}`);
+                            room.memory.data.storagelinktarget = null;
+                            room.memory.data.storagelinkcommand = 'inbound';
+                        }
                         //console.log('[' + room.name + '] Send Link Xfer called');
 
                         room.memory.data.storagelinktarget = null;

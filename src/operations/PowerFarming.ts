@@ -12,7 +12,7 @@ export class PowerFarming extends Operation {
     operationOperators:Operator[];
     powerRooms:any[] = [
     //    { target: 'E30N1', source: 'E31N1', 'shard': 'shard1' },
-    //    { target: 'E30N0', source: 'E31N1', 'shard': 'shard1' },
+       { target: 'E30N0', source: 'E31N1', 'shard': 'shard1' },
     //    { target: 'E31N0', source: 'E31N1', 'shard': 'shard1' },
     ];
 

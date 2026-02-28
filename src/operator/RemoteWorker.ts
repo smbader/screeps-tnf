@@ -69,7 +69,7 @@ export class RemoteWorker extends Operator {
         if (!this.creep) {
             return;
         }
-        console.log('RemoteWorker ' + this.creep.name + ' in ' + this.creep.room.name + ' working on ' + this.targetroom.name);
+        //console.log('RemoteWorker ' + this.creep.name + ' in ' + this.creep.room.name + ' working on ' + this.targetroom.name);
 
         // First objective is to complete waypoints
         if (this.creep.memory.waypoint == undefined || this.creep.memory.waypoint == null)  {
@@ -97,7 +97,7 @@ export class RemoteWorker extends Operator {
         }
 
         if (this.creep.memory.targetRoom !== this.creep.room.name) {
-            let roomPos = new RoomPosition(6, 48, this.creep.memory.targetRoom)
+            let roomPos = new RoomPosition(41, 15, this.creep.memory.targetRoom)
             this.creep.travelTo(roomPos);
             return;
         }
@@ -220,9 +220,9 @@ export class RemoteWorker extends Operator {
                 let empty = this.creep.pos.findClosestByRange(FIND_STRUCTURES, {
                     filter: function(object:SupplyStructure) {
                         return (
-                            ( object.structureType == STRUCTURE_SPAWN  ) &&
-                            //(object.structureType == STRUCTURE_TOWER) &&
-                            (object.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+                            (( object.structureType == STRUCTURE_SPAWN  ) ||
+                            (object.structureType == STRUCTURE_TOWER)) &&
+                            (object.store.getFreeCapacity(RESOURCE_ENERGY) > 50)
                         );
                     }
                 });
@@ -279,13 +279,18 @@ export class RemoteWorker extends Operator {
     }
 
     shouldFlee(creep:Creep) {
+        if (creep.room.controller?.safeMode && creep.room.controller?.safeMode > 10) {
+            return false; // No need to flee in safe mode
+        }
+
         // Find hostiles in the room
         const hostiles = creep.room.find(FIND_HOSTILE_CREEPS);
 
-        // Find nearby enemies within a dangerous range (e.g., 4 tiles)
-        const threateningEnemies = hostiles.filter(enemy =>
-            creep.pos.getRangeTo(enemy) <= 9
-        );
+        // Find nearby enemies within a dangerous distance by path (e.g., 8 tiles)
+        const threateningEnemies = hostiles.filter((enemy: Creep) => {
+            const path = creep.pos.findPathTo(enemy.pos, { ignoreCreeps: true });
+            return path.length > 0 && path.length <= 7;
+        });
 
         // Return true if there's at least one enemy close enough
         return threateningEnemies.length > 0;

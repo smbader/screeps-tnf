@@ -25,8 +25,9 @@ export class RoomArcher extends Operator {
     creep: RoomArcherCreep | null;
     targetroom: string;
     waypoints?: any[];
+    body?: BodyPartConstant[];
 
-    constructor(name: string, room: Room, targetRoom: string, waypoints: string[]) {
+    constructor(name: string, room: Room, targetRoom: string, waypoints: string[], body?: BodyPartConstant[]) {
         super(name, room);
 
         if (Game.creeps[this.name]) {
@@ -37,6 +38,7 @@ export class RoomArcher extends Operator {
         this.room = room;
         this.targetroom = targetRoom;
         this.waypoints = waypoints;
+        this.body = body;
     }
 
     actions() {
@@ -46,10 +48,21 @@ export class RoomArcher extends Operator {
             return;
         }
         // First objective is to complete waypoints
-        if (this.creep.memory.waypoint == undefined || this.creep.memory.waypoint == null)  {
+        if (this.creep.memory.waypoint == undefined || this.creep.memory.waypoint == null) {
             this.creep.memory.waypoint = 0;
         }
-        this.creep.heal(this.creep);
+        if (this.creep.hits < this.creep.hits) {
+            this.creep.heal(this.creep);
+        } else {
+        // Find the nearest creep that has less than full health
+            const damagedCreep = this.creep.pos.findClosestByRange(FIND_MY_CREEPS, {
+                filter: (c) => c.hits < c.hitsMax
+            });
+            if (damagedCreep) {
+                this.creep.heal(damagedCreep);
+            }
+        }
+
 
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.waypoints != undefined) {
@@ -69,18 +82,37 @@ export class RoomArcher extends Operator {
 
         if (this.creep.memory.targetRoom !== this.creep.room.name) {
             let roomPos = new RoomPosition(25, 25, this.creep.memory.targetRoom)
-            this.creep.travelTo(roomPos);
+            if (this.creep.pos.getRangeTo(roomPos) > 20) {
+                this.creep.travelTo(roomPos);
+            }
             return;
         }
 
+
         let target = this.findPriorityTarget(this.creep);
+
+        this.handleKiting(this.creep);
+
         if (!target) {
+
             let structure = this.findClosestStructureUnderFlag(this.creep);
             if (!structure) {
                 structure = this.getPrioritizedHostileStructures(this.creep.room);
             }
             if (!structure) {
                 this.creep.say("👀 No target");
+                // Move to within 10 range of nearest tower
+                const towers = this.creep.room.find(FIND_STRUCTURES, {
+                    filter: s => s.structureType === STRUCTURE_TOWER
+                }) as StructureTower[];
+
+                if (towers.length > 0) {
+                    const closestTower = this.creep.pos.findClosestByRange(towers);
+                    if (closestTower && this.creep.pos.getRangeTo(closestTower) > 10) {
+                        this.creep.travelTo(closestTower.pos);
+                        return;
+                    }
+                }
                 return;
             } else {
                 this.attackStructureWithRanged(this.creep, structure);
@@ -88,8 +120,6 @@ export class RoomArcher extends Operator {
             }
         }
 
-        // Movement logic (kite or approach)
-        this.handleKiting(this.creep, target);
 
         // Attack logic (mass or single)
         this.attackWithRanged(this.creep, target);
@@ -165,27 +195,55 @@ export class RoomArcher extends Operator {
         if (hostiles.length === 0) return null;
 
         // Prioritize targets: Healers > Damaged > Others
-        const healers = hostiles.filter(h => h.getActiveBodyparts(HEAL) > 0);
-        if (healers.length > 0) {
-            return creep.pos.findClosestByPath(healers) || null;
+
+        const claimer = hostiles.filter(h => h.getActiveBodyparts(CLAIM) > 0);
+        if (claimer.length > 0) {
+            return creep.pos.findClosestByPath(claimer) || null;
         }
 
-        const damaged = hostiles.filter(h => h.hits < h.hitsMax);
-        if (damaged.length > 0) {
-            return creep.pos.findClosestByPath(damaged) || null;
-        }
+        //const damaged = hostiles.filter(h => h.hits < h.hitsMax);
+        //if (damaged.length > 0) {
+        //    return creep.pos.findClosestByPath(damaged) || null;
+        //}
+
+        //const healers = hostiles.filter(h => h.getActiveBodyparts(HEAL) > 0);
+        //if (healers.length > 0) {
+        //    return creep.pos.findClosestByPath(healers) || null;
+        //}
 
         return creep.pos.findClosestByPath(hostiles) || null;
     }
 
-    handleKiting(creep: Creep, target: Creep): void {
+    handleKiting(creep: Creep): void {
+        let target: Creep | null = null;
+        const hostiles = creep.room.find(FIND_HOSTILE_CREEPS);
+        if (hostiles.length === 0) return;
+
+        // Consider all enemies so archers will kite away from any hostile in the room
+        const closestHostile = creep.pos.findClosestByRange(hostiles);
+        if (!closestHostile) return;
+        target = closestHostile;
         const range = creep.pos.getRangeTo(target);
 
-        // If enemy is too close (melee range)
-        if (range <= 2) {
+        console.log(`Range to nearest hostile: ${range}, Hits: ${creep.hits}/${creep.hitsMax}`);
+
+        // If enemy is too close (melee range) or creep is significantly damaged -> flee
+        if (range <= 3 || (creep.hitsMax - creep.hits) > 20) {
+            // Use all hostiles as goals so PathFinder flees from the group, not a single target
+            //const goals = hostiles.map(h => ({ pos: h.pos, range: 4 }));
+            let goal:RoomPosition = new RoomPosition(25, 25, creep.room.name);
+            let tower = creep.pos.findClosestByRange(FIND_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_TOWER
+            }) as StructureTower;
+            if (tower) {
+                goal = tower.pos;
+            }
+
+            const goals = [{ pos: goal, range: 4 }];
+/*
             const fleePath = PathFinder.search(
                 creep.pos,
-                [{ pos: target.pos, range: 3 }],
+                goals,
                 {
                     flee: true,
                     maxRooms: 1,
@@ -212,14 +270,15 @@ export class RoomArcher extends Operator {
                                 costs.set(c.pos.x, c.pos.y, 255);
                             }
                         });
+
                         // Penalize room edges to prevent leaving the room
                         for (let x = 0; x < 50; x++) {
-                            costs.set(x, 0, 255);     // Top edge
-                            costs.set(x, 49, 255);    // Bottom edge
+                            costs.set(x, 0, 255);
+                            costs.set(x, 49, 255);
                         }
                         for (let y = 0; y < 50; y++) {
-                            costs.set(0, y, 255);     // Left edge
-                            costs.set(49, y, 255);    // Right edge
+                            costs.set(0, y, 255);
+                            costs.set(49, y, 255);
                         }
 
                         return costs;
@@ -227,13 +286,105 @@ export class RoomArcher extends Operator {
                 }
             );
 
+ */
+            const fleePath = PathFinder.search(
+                creep.pos,
+                goals,
+                {
+                    // Path to the tower (don't use flee:true — goal is the tower)
+                    maxRooms: 1,
+                    roomCallback: (roomName: string) => {
+                        const room = Game.rooms[roomName];
+                        if (!room) return false;
+
+                        const costs = new PathFinder.CostMatrix();
+
+                        // Treat non-walkable structures as walls
+                        room.find(FIND_STRUCTURES).forEach(struct => {
+                            if (
+                                struct.structureType !== STRUCTURE_ROAD &&
+                                struct.structureType !== STRUCTURE_CONTAINER &&
+                                (struct.structureType !== STRUCTURE_RAMPART || !struct.my)
+                            ) {
+                                costs.set(struct.pos.x, struct.pos.y, 255);
+                            }
+                        });
+
+                        // Avoid other creeps
+                        room.find(FIND_CREEPS).forEach(c => {
+                            if (c.id !== creep.id) {
+                                costs.set(c.pos.x, c.pos.y, 255);
+                            }
+                        });
+
+                        // Penalize tiles near hostiles so the path prefers routes away from enemies
+                        hostiles.forEach(h => {
+                            for (let dx = -3; dx <= 3; dx++) {
+                                for (let dy = -3; dy <= 3; dy++) {
+                                    const x = h.pos.x + dx;
+                                    const y = h.pos.y + dy;
+                                    if (x >= 0 && x < 50 && y >= 0 && y < 50) {
+                                        costs.set(x, y, 254);
+                                    }
+                                }
+                            }
+                        });
+
+                        // Penalize room edges to prevent leaving the room
+                        for (let x = 0; x < 50; x++) {
+                            costs.set(x, 0, 255);
+                            costs.set(x, 49, 255);
+                        }
+                        for (let y = 0; y < 50; y++) {
+                            costs.set(0, y, 255);
+                            costs.set(49, y, 255);
+                        }
+
+                        return costs;
+                    }
+                }
+            );
+
+            console.log(`${creep.name} Flee path length: ${fleePath.path.length}, Cost: ${fleePath.cost}`);
             if (fleePath.path.length > 0) {
-                creep.move(creep.pos.getDirectionTo(fleePath.path[0]));
+                // Prefer steps that also move toward a tower (if present) while increasing distance from hostiles.
+                const towers = creep.room.find(FIND_STRUCTURES, {
+                    filter: s => s.structureType === STRUCTURE_TOWER
+                }) as StructureTower[];
+
+                let chosenStep = fleePath.path[0];
+
+                if (towers.length > 0) {
+                    const currentTowerDist = Math.min(...towers.map(t => creep.pos.getRangeTo(t.pos)));
+                    const currentHostileDist = Math.min(...hostiles.map(h => creep.pos.getRangeTo(h.pos)));
+
+                    const lookAhead = Math.min(4, fleePath.path.length);
+                    for (let i = 0; i < lookAhead; i++) {
+                        const step = fleePath.path[i];
+                        const stepPos = new RoomPosition(step.x, step.y, step.roomName);
+                        const stepTowerDist = Math.min(...towers.map(t => stepPos.getRangeTo(t.pos)));
+                        const stepHostileDist = Math.min(...hostiles.map(h => stepPos.getRangeTo(h.pos)));
+
+                        // prefer steps that don't reduce distance to hostiles and that get closer to a tower
+                        if (stepHostileDist >= currentHostileDist && stepTowerDist <= currentTowerDist) {
+                            chosenStep = step;
+                            break;
+                        }
+                    }
+                }
+
+                creep.move(creep.pos.getDirectionTo(new RoomPosition(chosenStep.x, chosenStep.y, chosenStep.roomName)));
                 creep.say("🚪 Kite");
             }
         }
-        // If out of range to shoot, move closer
-        else if (range > 3) {
+        // If out of range to shoot, move closer to nearest hostile (maintain engagement range)
+        else if (range >= 4) {
+            // If the target is in the first 3 squares of the room, don't chase
+            let rand = Math.floor(Math.random() * 6);
+            if (target.pos.x <= rand || target.pos.x >= (50 - rand) || target.pos.y <= rand || target.pos.y >= (50 - rand)) {
+                creep.say("👀 At edge");
+                return;
+            }
             creep.moveTo(target, {
                 visualizePathStyle: { stroke: "#ffaa00" },
                 reusePath: 3,
@@ -241,18 +392,13 @@ export class RoomArcher extends Operator {
             });
             creep.say("➡️ Close in");
         }
-        // Otherwise (range 2–3): stay in position
+        // Otherwise (range 2–3): hold position
     }
 
     attackWithRanged(creep: Creep, target: Creep): void {
         const enemiesInRange = creep.pos.findInRange(FIND_HOSTILE_CREEPS, 3);
 
-        if (enemiesInRange.length > 2) {
-            const result = creep.rangedMassAttack();
-            if (result === OK) {
-                creep.say("💥 AoE!");
-            }
-        } else if (creep.pos.getRangeTo(target) <= 3) {
+        if (creep.pos.getRangeTo(target) <= 3) {
             const result = creep.rangedAttack(target);
             if (result === OK) {
                 creep.say("🎯 Shoot");

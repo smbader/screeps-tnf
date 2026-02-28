@@ -5,11 +5,37 @@ import {RoomHealer} from "../operator/RoomHealer";
 import {RoomArcher} from "../operator/RoomArcher";
 import { RoomHelper } from "../utils/RoomHelper";
 
-export class RemoteAttack extends Operation {
+class RemoteAttack extends Operation {
 
     operationOperators:Operator[];
+
+    smallRangerBody = [RANGED_ATTACK, MOVE, HEAL, MOVE];
+    mediumRangerBody = [
+        TOUGH, MOVE,
+        RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE,
+        HEAL, MOVE, HEAL, MOVE
+    ];
+    largeRangerBody = [
+        TOUGH, MOVE,
+        RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE,
+        RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE,
+        HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE
+    ];
+    jumboRangerBody = [
+        RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK,
+        RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE,
+        RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE,
+        RANGED_ATTACK, MOVE, RANGED_ATTACK, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
+        HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE, HEAL, MOVE
+    ];
+
     attackRooms:any[] = [
-        { target: 'W4N2', source: 'W13N1', forcespawn: true, waypoints: [ { 'room': 'W13N0', 'x': 47, 'y': 34 , 'shard': 3}, { 'room': 'W4N0', 'x': 18, 'y': 7 , 'shard': 3}, { 'room': 'W4N1', 'x': 25, 'y': 41 , 'shard': 3} ] },
+        { target: 'E33N2', source: 'E32N2', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: 'E33N3', source: 'E32N2', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: 'E33N4', source: 'E32N4', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: 'E31N4', source: 'E31N3', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: "E31N2", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
+        { target: "E31N2", source: 'E31N3', forcespawn: true, total: 6, rangertype: this.jumboRangerBody, waypoints: [ ] },
     ];
 
     constructor() {
@@ -23,13 +49,11 @@ export class RemoteAttack extends Operation {
         for (var attackRoom of this.attackRooms) {
             let sourceRoom = Game.rooms[attackRoom.source];
 
-            let nameranger = 'RoomArcher_' + 0;
-            let operatorranger = new RoomArcher(nameranger, sourceRoom, attackRoom.target, attackRoom.waypoints);
-            this.operationOperators.push(operatorranger);
-
-            let nameranger1 = 'RoomArcher_' + 1;
-            let operatorranger1 = new RoomArcher(nameranger1, sourceRoom, attackRoom.target, attackRoom.waypoints);
-            this.operationOperators.push(operatorranger1);
+            for (let i = 0; i < attackRoom.total; i++) {
+                const nameranger = 'RoomArcher_' + i + '_' + attackRoom.target;
+                const operatorranger = new RoomArcher(nameranger, sourceRoom, attackRoom.target, attackRoom.waypoints, attackRoom.rangertype);
+                this.operationOperators.push(operatorranger);
+            }
 
         }
     }
@@ -64,14 +88,12 @@ export class RemoteAttack extends Operation {
                             }
 
                             if (operationOperator instanceof RoomArcher) {
-                                spawn.spawnCreep([
-                                    TOUGH, TOUGH,
-                                    RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK, RANGED_ATTACK,
-                                    RANGED_ATTACK, RANGED_ATTACK,
-                                    MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
-                                    MOVE, MOVE, MOVE, MOVE, MOVE, MOVE,
-                                    HEAL, HEAL, HEAL, HEAL, HEAL, HEAL
-                                ], operationOperator.name, { directions: spawnDirection});
+                                let body:BodyPartConstant[] = this.smallRangerBody;
+                                if (operationOperator.body) {
+                                    body = operationOperator.body;
+                                }
+                                let result = spawn.spawnCreep(body, operationOperator.name, { directions: spawnDirection});
+                                console.log(`Spawning Room Archer ${operationOperator.name} in room ${operationOperator.room.name} with result ${result}`);
                             }
 
                         } else {
@@ -103,3 +125,5 @@ export class RemoteAttack extends Operation {
     }
 
 }
+
+export default RemoteAttack

@@ -4,6 +4,7 @@ import {Field} from "../operator/Field";
 import { RoomHealer } from "../operator/RoomHealer";
 import { RoomFighter } from "../operator/RoomFighter";
 import { MapHelper } from "../utils/MapHelper";
+//import { GroundSupportOld } from "../operator/GroundSupport-old";
 import { GroundSupport } from "../operator/GroundSupport";
 import { RoomHelper } from "../utils/RoomHelper";
 
@@ -45,13 +46,30 @@ export class RoomDefense extends Operation {
 
           // Process tower actions in a single loop, minimize nested logic
           if (towers.length) {
-              // Find closest hostile once for all towers
+
               const hostiles = room.find(FIND_HOSTILE_CREEPS);
-              const closestHostilesMap: { [id: string]: Creep | null } = {};
-              for (const tower of towers) {
-                  closestHostilesMap[tower.id] = hostiles.length
-                      ? tower.pos.findClosestByRange(hostiles)
-                      : null;
+              if (hostiles.length > 0) {
+                  // Find the closest hostile to the tower and attack it with all towers in range
+                  // Prefer hostiles with a CLAIM part; otherwise use all hostiles
+                  const claimers = hostiles.filter(h => h.getActiveBodyparts(CLAIM) > 0);
+
+                  // For each tower, target the closest hostile from the prioritized list
+                  for (const tower of towers) {
+                      const candidates = claimers.length > 0 ? claimers : hostiles;
+                      const target = tower.pos.findClosestByRange(candidates);
+                      if (!target) continue;
+
+                      let range = tower.pos.getRangeTo(target);
+                      if (range < 40 || (target.hits < (target.hitsMax * 0.75) && range < 30) || (target.hits < (target.hitsMax * 0.5) && range < 35) || target.getActiveBodyparts(CLAIM) > 0) {
+
+                          const result = tower.attack(target);
+                          if (result === OK) {
+                              console.log(`Attacking hostile creep with tower at (${tower.pos.x}, ${tower.pos.y}) in room ${room.name}` + ` at range ${range} with target hits ${target.hits}/${target.hitsMax}`);
+                          } else if (result !== ERR_NOT_IN_RANGE) {
+                              console.log(`Tower at (${tower.pos.x}, ${tower.pos.y}) failed to attack hostile: ${result} in room ${room.name}`);
+                          }
+                      }
+                  }
               }
 
               // Find all damaged creeps and structures once
@@ -87,13 +105,6 @@ export class RoomDefense extends Operation {
 
               for (const tower of towers) {
                   let jobFound = false;
-
-                  const closestHostile = closestHostilesMap[tower.id];
-                  if (closestHostile) {
-                      tower.attack(closestHostile);
-                      jobFound = true;
-                      continue;
-                  }
 /*
                   const closestDamagedCreep = tower.pos.findClosestByRange(damagedCreeps);
                   if (closestDamagedCreep && !jobFound) {

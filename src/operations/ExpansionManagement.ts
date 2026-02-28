@@ -9,9 +9,15 @@ export class ExpansionManagement extends Operation {
 
     operationOperators: Operator[];
     expansionRooms: any[] = [
-        //{ target: 'E28S1', source: 'E31N1', forcespawn: true, waypoints: [] },
-        //{ target: 'E37S1', source: 'E31N1', forcespawn: true, waypoints: [] },
-        //{ target: 'E33N5', source: 'E31N3', forcespawn: true, waypoints: [] },
+        //{ target: 'E25N11', source: 'E31N3', forcespawn: true, waypoints: [
+        //        {x: 14, y: 30, room: 'E30N10', shard: "1"},
+        //        {x: 19, y: 42, room: 'E26N11', shard: "1"},
+        //        {x: 48, y: 18, room: 'E25N11', shard: "1"},
+        //    ] },
+        //{ target: 'E32N2', source: 'E31N3', forcespawn: true, waypoints: [] },
+        { target: 'E31N2', source: 'E31N1', forcespawn: true, waypoints: [] },
+        ///{ target: 'E33S1', source: 'E31N1', forcespawn: true, waypoints: [] },
+        //{ target: 'E33S1', source: 'E31N1', forcespawn: true, waypoints: [] },
         //{ target: 'E32N4', source: 'E31N3', forcespawn: true, waypoints: [] },
     ];
 
@@ -40,7 +46,7 @@ export class ExpansionManagement extends Operation {
             let idx = 0;
             if (targetRoom && targetRoom.memory && targetRoom.memory.sources) {
                 for (const sourceid in targetRoom.memory.sources) {
-                    for (let i = 1; i <= 4; i++) {
+                    for (let i = 1; i <= 3; i++) {
                         const rname = 'RemoteWorker_' + expansionRoom.target + '_' + i + '_' + idx;
                         const eoperator = new RemoteWorker(rname, sourceRoom, targetRoom, sourceid, expansionRoom.waypoints);
                         this.operationOperators.push(eoperator);

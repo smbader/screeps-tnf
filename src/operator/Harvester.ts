@@ -1,6 +1,4 @@
 import { Operator } from "../classes/operator";
-import { MapHelper } from "../utils/MapHelper";
-import {GroundSupportCreep} from "./GroundSupport";
 import { RoomHelper } from "../utils/RoomHelper";
 
 interface HarvesterMemory extends CreepMemory {
@@ -56,7 +54,7 @@ export class Harvester extends Operator {
     }
 
     actions() {
-        if (!this.creep || this.creep == null) return;
+        if (!this.creep) return;
         if (!this.creep.memory.parkingSpot) return;
         const parkingspot = this.creep.memory.parkingSpot;
 
@@ -71,8 +69,8 @@ export class Harvester extends Operator {
         }
 
         // Step 2: Find container/link, but cache their IDs in memory
-        let container: StructureContainer | null = null;
-        let link: StructureLink | null = null;
+        let container: StructureContainer | null;
+        let link: StructureLink | null;
 
         // Only search for container every 10 ticks
         if (!this.creep.memory.containerId || !Game.getObjectById(this.creep.memory.containerId) || Game.time % 50 === 0) {
@@ -86,16 +84,60 @@ export class Harvester extends Operator {
             container = Game.getObjectById(this.creep.memory.containerId) as StructureContainer | null;
         }
 
-        // Only search for link every 10 ticks
+        // Only search for link every 50 ticks
         if (!this.creep.memory.linkId || !Game.getObjectById(this.creep.memory.linkId) || Game.time % 50 === 0) {
-            let x = this.creep.memory.parkingSpot!.x;
-            let y = this.creep.memory.parkingSpot!.y;
-            link = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
-                filter: s =>
-                    s.structureType === STRUCTURE_LINK &&
-                    s.pos.getRangeTo(x, y) < 3
-            })[0] as StructureLink | null;
-            if (link) this.creep.memory.linkId = link.id;
+            // First, prefer an exact link coordinate stored in the target room's memory for this source
+            const srcId = this.creep.memory.sourceid as any;
+
+            // Try memory first (targetRoom.memory.sources keyed by source id)
+            let lx: number | undefined;
+            let ly: number | undefined;
+            const memSources = (this.targetroom.memory && (this.targetroom.memory as any).sources) ? (this.targetroom.memory as any).sources : null;
+            if (memSources && memSources[srcId] && memSources[srcId].linkpos) {
+                lx = memSources[srcId].linkpos.x;
+                ly = memSources[srcId].linkpos.y;
+            }
+
+            // Next, try the resolved room config (energysources entries) if memory didn't have linkpos
+            if (lx === undefined || ly === undefined) {
+                const cfg = RoomHelper.getRoomConfig(this.targetroom);
+                if (cfg && cfg.energysources && Array.isArray(cfg.energysources)) {
+                    const matched = (cfg.energysources as any[]).find(es => es.id === srcId || (es.pos && es.pos.x === this.source.pos.x && es.pos.y === this.source.pos.y));
+                    if (matched && matched.linkpos) {
+                        lx = matched.linkpos.x;
+                        ly = matched.linkpos.y;
+                    }
+                }
+            }
+
+            if (lx !== undefined && ly !== undefined) {
+                // Try to find a link at the exact coordinates first
+                const pos = new RoomPosition(lx, ly, this.creep.room.name);
+                const structs = pos.lookFor(LOOK_STRUCTURES) as AnyStructure[];
+                link = (structs.find(s => s.structureType === STRUCTURE_LINK) as StructureLink) || null;
+                if (link) this.creep.memory.linkId = link.id;
+                else {
+                    // If exact position didn't yield a link, fall back to proximity search around parking spot
+                    const x = this.creep.memory.parkingSpot!.x;
+                    const y = this.creep.memory.parkingSpot!.y;
+                    link = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
+                        filter: s =>
+                            s.structureType === STRUCTURE_LINK &&
+                            s.pos.getRangeTo(x, y) < 3
+                    })[0] as StructureLink | null;
+                    if (link) this.creep.memory.linkId = link.id;
+                }
+            } else {
+                // Fallback: search around parking spot
+                let x = this.creep.memory.parkingSpot!.x;
+                let y = this.creep.memory.parkingSpot!.y;
+                link = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
+                    filter: s =>
+                        s.structureType === STRUCTURE_LINK &&
+                        s.pos.getRangeTo(x, y) < 3
+                })[0] as StructureLink | null;
+                if (link) this.creep.memory.linkId = link.id;
+            }
         } else {
             link = Game.getObjectById(this.creep.memory.linkId) as StructureLink | null;
         }
@@ -175,8 +217,7 @@ export class Harvester extends Operator {
             } else {
                 // Optionally repair container if damaged (only every 50 ticks)
                 if (
-                    container.hits < container.hitsMax * 0.95 &&
-                    Game.time % 50 === 0
+                    container.hits < container.hitsMax * 0.95
                 ) {
                     this.creep.say('🛠️');
                     this.creep.repair(container);

@@ -10,12 +10,13 @@ import { DepositFarmer } from "../operations/DepositFarmer";
 import { ExpansionManagement } from "../operations/ExpansionManagement";
 import { Market } from "../operations/Market";
 import { GeoMiningCompany } from "../operations/GeoMiningCompany";
-import { RemoteAttack } from "../operations/RemoteAttack";
+import RemoteAttack from "../operations/RemoteAttack";
 import { RemoteKeeper } from "../operations/RemoteKeeper";
 import { PowerHarvestOperation } from "../operations/PowerHarvestOperation";
 import { LabProcesses } from "../operations/LabProcesses";
 import { SquadSiegeOperation } from "../operations/SquadSiegeOperation";
 import { ControllerAttacker } from "../operations/ControllerAttacker";
+import { SiloDefense } from "../operations/SiloDefense";
 
 type Type_Operation_Classes = {
     [key: string]: any,
@@ -23,8 +24,8 @@ type Type_Operation_Classes = {
 
 const OPERATION_CLASSES: Type_Operation_Classes = {
     market: Market,                             // 5
-    //remoteattack: RemoteAttack,
-    powerharvestoperation: PowerHarvestOperation,                 // 6
+    remoteattack: RemoteAttack,
+    //powerharvestoperation: PowerHarvestOperation,                 // 6
     expansionmanagement: ExpansionManagement,   // 8
     remotefarming: RemoteFarming,               // 7
     roomdefense: RoomDefense,                   // 3
@@ -35,7 +36,8 @@ const OPERATION_CLASSES: Type_Operation_Classes = {
     //depositfarmer: DepositFarmer,             // 10
     //remotekeeper: RemoteKeeper,                 // 11
     //remoteconstruction: RemoteDeconstruction,
-    //labprocesses: LabProcesses,
+    labprocesses: LabProcesses,
+    silodefense: SiloDefense,
 };
 
 export var OperationHelper = {
@@ -66,6 +68,9 @@ export var OperationHelper = {
             //let controllerAttacker = new ControllerAttacker();
             //controllerAttacker.action('W4N1','W1N1');
         }
+
+        //let siege = new SquadSiegeOperation("E31N2", "E31N1", []);
+        //operationList.push(siege);
 
         // loop through operations defined by library
         for (let typeName in OPERATION_CLASSES) {

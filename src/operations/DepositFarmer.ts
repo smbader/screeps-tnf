@@ -8,7 +8,7 @@ export class DepositFarmer extends Operation {
 
     operationOperators:Operator[];
     depositRooms:any[] = [
-        { target: 'E30N1', source: 'E31N0', 'shard': 'shard1' },
+        { target: 'E30N1', source: 'E31N1', 'shard': 'shard1' },
     ];
 
     constructor() {

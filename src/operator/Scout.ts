@@ -67,8 +67,8 @@ export class Scout extends Operator {
             }
         }
 
-        let roomPos = new RoomPosition(20, 5, this.creep.memory.targetRoom)
-        if (this.creep.pos.getRangeTo(roomPos) > 10) {
+        let roomPos = new RoomPosition(25, 25, this.creep.memory.targetRoom)
+        if (this.creep.pos.getRangeTo(roomPos) > 20) {
             this.creep.travelTo(roomPos);
         }
         this.creep.say('💤');

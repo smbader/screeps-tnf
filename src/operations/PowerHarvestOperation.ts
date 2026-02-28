@@ -1,6 +1,6 @@
 import { Operation } from "../classes/operation";
 
-try { console.log(`PowerHarvestOperation module loaded`); } catch (e) {}
+//try { console.log(`PowerHarvestOperation module loaded`); } catch (e) {}
 
 const OBSERVER_SCAN_INTERVAL = 10;
 const POWERBANK_MIN_TTL = 1100;
@@ -51,6 +51,36 @@ function getClosestOwnedRoom(targetRoom: string): string | null {
 export class PowerHarvestOperation extends Operation {
     constructor() {
         super();
+    }
+
+    // Helper: append an event to a bank's timeline (keeps only recent N entries)
+    private appendTimeline(bank: PowerBankMemory, event: string, value?: any, maxEntries = 12) {
+        try {
+            if (!bank.timeline) bank.timeline = [];
+            bank.timeline.push({ tick: Game.time, event, value });
+            if (bank.timeline.length > maxEntries) bank.timeline = bank.timeline.slice(-maxEntries);
+        } catch (e) {}
+    }
+
+    // Helper: draw lightweight visuals for a bank to aid tuning
+    private drawBankVisuals(bank: PowerBankMemory) {
+        try {
+            const pos = new RoomPosition(bank.pos.x, bank.pos.y, bank.room);
+            const vis = new RoomVisual(bank.room);
+            // Draw a small circle at bank position with color based on state
+            const colorMap: { [k: string]: string } = { waiting: '#ffff00', breaking: '#ff6600', hauling: '#00ccff', done: '#999999' };
+            const col = colorMap[bank.state] || '#ffffff';
+            vis.circle(pos.x, pos.y, { radius: 0.6, fill: 'transparent', stroke: col, opacity: 0.8 });
+            // Show state and TTL above the bank
+            vis.text(`${bank.state} ${bank.ticksToDecay}`, pos.x, Math.max(0, pos.y - 0.8), { color: col, font: 0.6, align: 'center' });
+            // Show a compact timeline string below the bank (most recent 3 events)
+            if (bank.timeline && bank.timeline.length > 0) {
+                const recent = bank.timeline.slice(-3).map(t => `${Game.time - t.tick}:${t.event}`);
+                vis.text(recent.join(' '), pos.x, Math.min(49, pos.y + 0.8), { color: '#ffffff', font: 0.45, align: 'center' });
+            }
+        } catch (e) {
+            // ignore visual errors in headless/test environments
+        }
     }
 
     static getAllActiveBanks(): { room: string; pos: { x: number; y: number }; claimedBy?: string }[] {
@@ -143,27 +173,42 @@ export class PowerHarvestOperation extends Operation {
         if (!room.memory.powerHarvest._observedRoom) return;
 
         const roomName = room.memory.powerHarvest._observedRoom;
-        const banks: PowerBankMemory[] = [];
         const observedRoom = Game.rooms[roomName];
-        if (observedRoom) {
-            const powerbanks = observedRoom.find<StructurePowerBank>(FIND_STRUCTURES, {
-                filter: structure => structure.structureType === STRUCTURE_POWER_BANK
-            });
-            for (const bank of powerbanks) {
-                banks.push({
+        if (!observedRoom) return;
+
+        const powerbanks = observedRoom.find<StructurePowerBank>(FIND_STRUCTURES, {
+            filter: structure => structure.structureType === STRUCTURE_POWER_BANK
+        });
+
+        // Ensure memory banks array exists
+        if (!room.memory.powerHarvest.banks) room.memory.powerHarvest.banks = [];
+
+        // For each observed bank, merge into existing memory entry (preserve arrays/timeline) or create new entry
+        for (const bank of powerbanks) {
+            // try to find existing entry for this bank by room+pos
+            let existing = room.memory.powerHarvest.banks.find(b => b.room === roomName && b.pos.x === bank.pos.x && b.pos.y === bank.pos.y);
+            if (existing) {
+                // update dynamic fields but preserve names/timeline/home/claimedBy/state unless they are missing
+                existing.ticksToDecay = bank.ticksToDecay;
+                existing.power = bank.power;
+                existing.lastChecked = Game.time;
+            } else {
+                const pb: PowerBankMemory = {
                     room: roomName,
                     pos: bank.pos,
                     ticksToDecay: bank.ticksToDecay,
                     power: bank.power,
                     lastChecked: Game.time,
                     state: "waiting",
-                    claimedBy: undefined
-                });
+                    claimedBy: undefined,
+                    timeline: [{ tick: Game.time, event: 'seen', value: { power: bank.power, ttl: bank.ticksToDecay } }]
+                } as PowerBankMemory;
+                room.memory.powerHarvest.banks.push(pb);
             }
-            room.memory.powerHarvest.banks = room.memory.powerHarvest.banks
-                .filter(b => b.room !== roomName)
-                .concat(banks);
         }
+
+        // Optionally remove banks from memory for this observed room that are no longer present in the observed room
+        room.memory.powerHarvest.banks = room.memory.powerHarvest.banks.filter(b => b.room !== roomName || powerbanks.some(pb => pb.pos.x === b.pos.x && pb.pos.y === b.pos.y));
     }
 
     cleanupBanks(room: Room) {
@@ -184,7 +229,19 @@ export class PowerHarvestOperation extends Operation {
     }
 
     spawnBreakers(room: Room, bank: PowerBankMemory) {
-        if (bank.ticksToDecay < POWERBANK_MIN_TTL) return;
+        // Only block starting new operations if the bank is still in waiting and its TTL is too low.
+        // If we've already started breaking, allow breakers to continue even if TTL has dropped below the threshold.
+        if (bank.state === 'waiting' && bank.ticksToDecay < POWERBANK_MIN_TTL) return;
+
+        // If an operation is not already underway, require >100k energy in storage before starting
+        const operationActive = (bank.state === 'breaking' || bank.state === 'hauling' || (bank.fighterNames && bank.fighterNames.length > 0) || (bank.healerNames && bank.healerNames.length > 0) || (bank.haulerNames && bank.haulerNames.length > 0));
+        if (!operationActive) {
+            const storageEnergy = (room.storage && (room.storage.store as any) ? (room.storage.store[RESOURCE_ENERGY] || 0) : 0);
+            if (storageEnergy <= 100000) {
+                //console.log(`[PowerHarvest:${room.name}] insufficient storage energy (${storageEnergy}) to start breakers for bank ${bank.room}; need >100000 - skipping`);
+                return;
+            }
+        }
 
         bank.homeRoom = room.name;
 
@@ -232,10 +289,10 @@ export class PowerHarvestOperation extends Operation {
                         );
                         if (result === OK) {
                             bank.fighterNames.push(pfName);
-                            console.log(`[PowerHarvest:${room.name}] spawned fighter ${pfName} for bank ${bank.room}`);
+                            //console.log(`[PowerHarvest:${room.name}] spawned fighter ${pfName} for bank ${bank.room}`);
                             break;
                         } else {
-                            console.log(`[PowerHarvest] Failed to spawn fighter ${pfName} in ${room.name}: ${result}`);
+                            //console.log(`[PowerHarvest] Failed to spawn fighter ${pfName} in ${room.name}: ${result}`);
                         }
                     }
                 }
@@ -260,11 +317,20 @@ export class PowerHarvestOperation extends Operation {
                         );
                         if (result === OK) {
                             bank.healerNames.push(phName);
-                            console.log(`[PowerHarvest:${room.name}] spawned healer ${phName} for bank ${bank.room}`);
+                            //console.log(`[PowerHarvest:${room.name}] spawned healer ${phName} for bank ${bank.room}`);
                             break;
                         }
                     }
                 }
+            }
+        }
+
+        // If we have any fighters (spawned now or previously), mark the bank as breaking so the operation knows it's active
+        if ((bank.fighterNames && bank.fighterNames.length > 0) || (bank.healerNames && bank.healerNames.length > 0)) {
+            const prev = bank.state;
+            bank.state = 'breaking';
+            if (prev !== 'breaking') {
+                this.appendTimeline(bank, 'start_breaking');
             }
         }
     }
@@ -273,67 +339,98 @@ export class PowerHarvestOperation extends Operation {
         if (bank.state === "hauling") return; // Already hauling
         if (bank.homeRoom !== room.name) return;
 
-        console.log(`[PowerHarvest:${room.name}] spawnHaulers called for bank ${bank.room} (state=${bank.state}, power=${bank.power}, ticksToDecay=${bank.ticksToDecay})`);
+        //console.log(`[PowerHarvest:${room.name}] spawnHaulers called for bank ${bank.room} (state=${bank.state}, power=${bank.power}, ticksToDecay=${bank.ticksToDecay})`);
+
+        // If an operation is not already underway, require >100k energy in storage before spawning haulers
+        // Note: we already return above if bank.state === 'hauling', so that case is removed to avoid a TS narrowing error
+        const operationActive = (bank.state === 'breaking' || (bank.fighterNames && bank.fighterNames.length > 0) || (bank.healerNames && bank.healerNames.length > 0) || (bank.haulerNames && bank.haulerNames.length > 0));
+        if (!operationActive) {
+            const storageEnergy = (room.storage && (room.storage.store as any) ? (room.storage.store[RESOURCE_ENERGY] || 0) : 0);
+            if (storageEnergy <= 100000) {
+                //console.log(`[PowerHarvest:${room.name}] insufficient storage energy (${storageEnergy}) to spawn haulers for bank ${bank.room}; need >100000 - skipping`);
+                return;
+            }
+        }
 
         const breakTime = this.estimateBreakTime(bank);console.log(`Estimated break time for bank in ${bank.room}: ${breakTime} ticks`);
         const haulTravelTime = this.estimateHaulerTravelTime(room, bank.room);console.log(`Estimated hauler travel time to ${bank.room}: ${haulTravelTime} ticks`);
         const haulerLeadTime = haulTravelTime + HAULER_BUFFER;console.log(`Hauler lead time for bank in ${bank.room}: ${haulerLeadTime} ticks`);
-        console.log(`Power bank in ${bank.room} hauler countdown: ${Game.time - breakTime - haulerLeadTime} ticks`);
-        if (Game.time > breakTime - haulerLeadTime) {
-            if (!bank.haulerNames) bank.haulerNames = [];
-            for (let i = 0; i < Math.ceil(bank.power / 2000); i++) {
-                const haulerName = `PowerHauler_${bank.room}_${i + 1}`;
-                if (!Game.creeps[haulerName]) {
-                    const spawns = room.find(FIND_MY_SPAWNS);
-                    for (const spawn of spawns) {
-                        if (!spawn.spawning) {
-                            const result = spawn.spawnCreep(
-                                [MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY],
-                                haulerName,
-                                { memory: { role: "powerHauler", targetRoom: bank.room } }
-                            );
-                            if (result === OK) {
-                                bank.haulerNames.push(haulerName);
-                                console.log(`[PowerHarvest:${room.name}] spawned hauler ${haulerName} for bank ${bank.room}`);
-                                break;
-                            } else {
-                                console.log(`[PowerHarvest:${room.name}] spawn attempt for ${haulerName} returned ${result}`);
-                            }
-                        }
-                    }
-                }
-            }
-            bank.state = "hauling";
-        }
-    }
+        const ticksUntilSpawn = breakTime - haulerLeadTime;
+        //console.log(`Power bank in ${bank.room} ticksUntilSpawn (negative => spawn now): ${ticksUntilSpawn}`);
+        // Spawn haulers when the remaining estimated break time is less than or equal to the lead time required for haulers to arrive
+        if (breakTime <= haulerLeadTime) {
+             if (!bank.haulerNames) bank.haulerNames = [];
+             for (let i = 0; i < Math.ceil(bank.power / 2000); i++) {
+                 const haulerName = `PowerHauler_${bank.room}_${i + 1}`;
+                 if (!Game.creeps[haulerName]) {
+                     const spawns = room.find(FIND_MY_SPAWNS);
+                     for (const spawn of spawns) {
+                         if (!spawn.spawning) {
+                             const result = spawn.spawnCreep(
+                                 [MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, MOVE, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY, CARRY],
+                                 haulerName,
+                                 { memory: { role: "powerHauler", targetRoom: bank.room } }
+                             );
+                             if (result === OK) {
+                                 bank.haulerNames.push(haulerName);
+                                 //console.log(`[PowerHarvest:${room.name}] spawned hauler ${haulerName} for bank ${bank.room}`);
+                                 this.appendTimeline(bank, 'spawn_hauler', { name: haulerName });
+                                 break;
+                             } else {
+                                 //console.log(`[PowerHarvest:${room.name}] spawn attempt for ${haulerName} returned ${result}`);
+                             }
+                         }
+                     }
+                 }
+             }
+             bank.state = "hauling";
+             // Append timeline entry for starting hauling (no conditional to avoid TS narrowing issues)
+             this.appendTimeline(bank, 'start_hauling');
+         }
+     }
 
     runFighter(bank: PowerBankMemory) {
-        if (bank.fighterNames) {
-            for (const fighterName of bank.fighterNames) {
-                const fighter = Game.creeps[fighterName];
-                if (!fighter) continue;
-                if (fighter.memory.role === "powerFighter") {
-                    console.log(`[PowerFighter:${fighterName}] tick in room ${fighter.room.name}, target bank room ${bank.room}`);
-                    if (fighter.room.name !== bank.room) {
-                        console.log(`[PowerFighter:${fighterName}] traveling to bank room ${bank.room}`);
-                        try { (fighter as any).travelTo(new RoomPosition(25, 25, bank.room)); } catch(e) { fighter.moveTo(new RoomPosition(25,25,bank.room)); }
-                    } else {
-                        const powerBank = fighter.pos.findClosestByPath(FIND_STRUCTURES, {
-                            filter: s => s.structureType === STRUCTURE_POWER_BANK
-                        });
-                        if (powerBank) {
-                            if ((fighter.hitsMax - fighter.hits) <= 500) {
-                                if (fighter.attack(powerBank) === ERR_NOT_IN_RANGE) {
-                                    console.log(`[PowerFighter:${fighterName}] attack not in range, moving to bank pos`);
-                                    try { (fighter as any).travelTo(powerBank.pos); } catch(e) { fighter.moveTo(powerBank.pos); }
-                                }
+         if (bank.fighterNames) {
+             for (const fighterName of bank.fighterNames) {
+                 const fighter = Game.creeps[fighterName];
+                 if (!fighter) continue;
+                 if (fighter.memory.role === "powerFighter") {
+                     //console.log(`[PowerFighter:${fighterName}] tick in room ${fighter.room.name}, target bank room ${bank.room}`);
+                     if (fighter.room.name !== bank.room) {
+                         //console.log(`[PowerFighter:${fighterName}] traveling to bank room ${bank.room}`);
+                         try { (fighter as any).travelTo(new RoomPosition(25, 25, bank.room)); } catch(e) { fighter.moveTo(new RoomPosition(25,25,bank.room)); }
+                     } else {
+                         const powerBank = fighter.pos.findClosestByPath(FIND_STRUCTURES, {
+                             filter: s => s.structureType === STRUCTURE_POWER_BANK
+                         });
+                         if (powerBank) {
+                             // Always attempt to attack the power bank. If not in range, move into range.
+                             const attackRes = fighter.attack(powerBank);
+                            if (attackRes === ERR_NOT_IN_RANGE) {
+                                //console.log(`[PowerFighter:${fighterName}] attack not in range, moving to bank pos`);
+                                try { (fighter as any).travelTo(powerBank.pos); } catch(e) { fighter.moveTo(powerBank.pos); }
+                            } else if (attackRes !== OK) {
+                                //console.log(`[PowerFighter:${fighterName}] attack returned ${attackRes}`);
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
+                            if (attackRes === ERR_NOT_IN_RANGE) {
+                                //console.log(`[PowerFighter:${fighterName}] attack not in range, moving to bank pos`);
+                                try { (fighter as any).travelTo(powerBank.pos); } catch(e) { fighter.moveTo(powerBank.pos); }
+                                this.appendTimeline(bank, 'attack_move', { fighter: fighterName });
+                                bank.state = 'breaking';
+                            } else if (attackRes === OK) {
+                                //console.log(`[PowerFighter:${fighterName}] attacked power bank`);
+                                this.appendTimeline(bank, 'attack', { fighter: fighterName });
+                                bank.state = 'breaking';
+                            } else {
+                                //console.log(`[PowerFighter:${fighterName}] attack returned ${attackRes}`);
+                                this.appendTimeline(bank, 'attack_err', { fighter: fighterName, code: attackRes });
+                            }
+                         }
+                     }
+                 }
+             }
+         }
+     }
 
     runHealer(bank: PowerBankMemory) {
         if (bank.healerNames) {
@@ -341,24 +438,24 @@ export class PowerHarvestOperation extends Operation {
                 const healer = Game.creeps[healerName];
                 if (!healer) continue;
                 if (healer.memory.role === "powerHealer" && healer.memory.targetFighter) {
-                    console.log(`[PowerHealer:${healerName}] tick in room ${healer.room.name}, target fighter ${healer.memory.targetFighter}`);
+                    //console.log(`[PowerHealer:${healerName}] tick in room ${healer.room.name}, target fighter ${healer.memory.targetFighter}`);
                     const fighter = Game.creeps[healer.memory.targetFighter];
                     if (fighter) {
                         if (healer.room.name !== bank.room) {
-                            console.log(`[PowerHealer:${healerName}] traveling to bank room ${bank.room}`);
+                            //console.log(`[PowerHealer:${healerName}] traveling to bank room ${bank.room}`);
                             try { (healer as any).travelTo(new RoomPosition(25, 25, bank.room)); } catch(e) { healer.moveTo(new RoomPosition(25,25,bank.room)); }
                         } else {
                             const range = healer.pos.getRangeTo(fighter);
                             if (range > 1) {
                                 healer.rangedHeal(fighter);
-                                console.log(`[PowerHealer:${healerName}] rangedHeal, moving to fighter`);
+                                //console.log(`[PowerHealer:${healerName}] rangedHeal, moving to fighter`);
                                 try { (healer as any).travelTo(fighter.pos); } catch(e) { healer.moveTo(fighter.pos); }
                             } else {
                                 healer.heal(fighter);
                             }
                         }
                     } else {
-                        console.log(`[PowerHealer:${healerName}] target fighter not found, moving to bank room ${bank.room}`);
+                        //console.log(`[PowerHealer:${healerName}] target fighter not found, moving to bank room ${bank.room}`);
                         try { (healer as any).travelTo(new RoomPosition(25, 25, bank.room)); } catch(e) { healer.moveTo(new RoomPosition(25,25,bank.room)); }
                      }
                  }
@@ -367,8 +464,10 @@ export class PowerHarvestOperation extends Operation {
      }
 
     runHaulers(room: Room, bank: PowerBankMemory) {
-        if (bank.haulerNames) {
-            console.log(`[PowerHarvest:${room.name}] running haulers: ${bank.haulerNames.join(', ')}`);
+        // draw visuals each tick for tuning
+        try { this.drawBankVisuals(bank); } catch (e) {}
+         if (bank.haulerNames) {
+            //console.log(`[PowerHarvest:${room.name}] running haulers: ${bank.haulerNames.join(', ')}`);
             for (const haulerName of bank.haulerNames) {
                 const hauler = Game.creeps[haulerName];
                 if (!hauler) continue;
@@ -420,18 +519,19 @@ export class PowerHarvestOperation extends Operation {
                     // If in the bank room and have capacity, try to pickup dropped power
                     if (hauler.room.name === targetRoom && hauler.store.getFreeCapacity() > 0) {
                         const dropsInRoom = hauler.room.find(FIND_DROPPED_RESOURCES, { filter: r => r.resourceType === RESOURCE_POWER });
-                        console.log(`[PowerHauler:${haulerName}] found ${dropsInRoom.length} dropped power items in room ${targetRoom}`);
+                        //console.log(`[PowerHauler:${haulerName}] found ${dropsInRoom.length} dropped power items in room ${targetRoom}`);
                         const droppedPower = hauler.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
                             filter: r => r.resourceType === RESOURCE_POWER
                         });
                         if (droppedPower) {
                             const res = hauler.pickup(droppedPower);
-                            console.log(`[PowerHauler:${haulerName}] pickup attempt for drop at ${droppedPower.pos} returned ${res}`);
+                            //console.log(`[PowerHauler:${haulerName}] pickup attempt for drop at ${droppedPower.pos} returned ${res}`);
                             if (res === ERR_NOT_IN_RANGE) {
                                 logStatus(`pickup not in range, traveling to dropped power at ${droppedPower.pos}`);
                                 doTravelTo(hauler, droppedPower.pos);
                             } else if (res === OK) {
                                 logStatus(`picked up ${droppedPower.resourceType} x${droppedPower.amount}`);
+                                this.appendTimeline(bank, 'hauler_pickup', { hauler: haulerName, amount: droppedPower.amount });
                             } else {
                                 logStatus(`pickup returned ${res}`);
                                 // attempt to move to the drop anyway
@@ -446,17 +546,38 @@ export class PowerHarvestOperation extends Operation {
 
                     // If hauler is carrying power, return to home room storage/terminal
                     if (hauler.store.getUsedCapacity(RESOURCE_POWER) > 0) {
-                        const dest = room.terminal && room.terminal.my
-                            ? room.terminal
-                            : room.storage;
+                        // Prefer terminal if it has room for RESOURCE_POWER, otherwise use storage
+                        let dest: StructureTerminal | StructureStorage | null = null;
+                        try {
+                            const term = room.terminal && room.terminal.my ? room.terminal : null;
+                            const stor = room.storage ? room.storage : null;
+                            if (term && (term.store.getFreeCapacity && term.store.getFreeCapacity(RESOURCE_POWER) > 0)) {
+                                dest = term;
+                            } else if (stor && (stor.store.getFreeCapacity && stor.store.getFreeCapacity(RESOURCE_POWER) > 0)) {
+                                dest = stor;
+                            } else if (term && term.store.getFreeCapacity && term.store.getFreeCapacity() > 0) {
+                                // fallback: any free capacity in terminal
+                                dest = term;
+                            } else if (stor && stor.store.getFreeCapacity && stor.store.getFreeCapacity() > 0) {
+                                dest = stor;
+                            } else {
+                                // fallback to terminal if exists, else storage
+                                dest = term || stor;
+                            }
+                        } catch (e) {
+                            // defensive: if store.getFreeCapacity with resource param isn't available, fallback to old behavior
+                            dest = (room.terminal && room.terminal.my) ? room.terminal : (room.storage ? room.storage : null);
+                        }
+
                         if (dest) {
                             const res = hauler.transfer(dest, RESOURCE_POWER);
-                            console.log(`[PowerHauler:${haulerName}] transfer attempt to ${dest.structureType} returned ${res}`);
+                            //console.log(`[PowerHauler:${haulerName}] transfer attempt to ${dest.structureType} returned ${res}`);
                             if (res === ERR_NOT_IN_RANGE) {
                                 logStatus(`transfer target not in range, traveling to dest ${dest.pos}`);
                                 doTravelTo(hauler, dest.pos);
                             } else if (res === OK) {
                                 logStatus(`transferred power to ${dest.structureType}`);
+                                this.appendTimeline(bank, 'hauler_deposit', { hauler: haulerName, dest: dest.structureType });
                             } else {
                                 logStatus(`transfer returned ${res}`);
                             }
@@ -562,7 +683,26 @@ export class PowerHarvestOperation extends Operation {
             }
 
             if (hauler.store.getUsedCapacity(RESOURCE_POWER) > 0) {
-                const dest = homeRoom && homeRoom.terminal && homeRoom.terminal.my ? homeRoom.terminal : (homeRoom ? homeRoom.storage : null);
+                // Prefer terminal if it has room for RESOURCE_POWER, otherwise use storage
+                let dest: StructureTerminal | StructureStorage | null = null;
+                try {
+                    const term = homeRoom && homeRoom.terminal && homeRoom.terminal.my ? homeRoom.terminal : null;
+                    const stor = homeRoom && homeRoom.storage ? homeRoom.storage : null;
+                    if (term && (term.store.getFreeCapacity && term.store.getFreeCapacity(RESOURCE_POWER) > 0)) {
+                        dest = term;
+                    } else if (stor && (stor.store.getFreeCapacity && stor.store.getFreeCapacity(RESOURCE_POWER) > 0)) {
+                        dest = stor;
+                    } else if (term && term.store.getFreeCapacity && term.store.getFreeCapacity() > 0) {
+                        dest = term;
+                    } else if (stor && stor.store.getFreeCapacity && stor.store.getFreeCapacity() > 0) {
+                        dest = stor;
+                    } else {
+                        dest = term || stor;
+                    }
+                } catch (e) {
+                    dest = (homeRoom && homeRoom.terminal && homeRoom.terminal.my) ? homeRoom.terminal : (homeRoom && homeRoom.storage ? homeRoom.storage : null);
+                }
+
                 if (dest) {
                     const res = hauler.transfer(dest, RESOURCE_POWER);
                     console.log(`[PowerHauler:${name}] standalone transfer to ${dest.structureType} returned ${res}`);
@@ -595,16 +735,14 @@ export class PowerHarvestOperation extends Operation {
     }
 
     actions() {
-        try { console.log(`[PowerHarvestOperation] actions tick ${Game.time} start`); } catch(e) {}
+        //try { console.log(`[PowerHarvestOperation] actions tick ${Game.time} start`); } catch(e) {}
          for (const roomName in Game.rooms) {
              const room = Game.rooms[roomName];
              if (!room.controller || !room.controller.my) continue;
 
             // lightweight per-room debug so we can see why the operation may be silent
             try {
-                const hasPH = !!room.memory.powerHarvest;
-                const bankCount = room.memory.powerHarvest ? (room.memory.powerHarvest.banks || []).length : 0;
-                console.log(`[PowerHarvestOperation] checking room ${roomName} owner=${room.controller?.owner?.username} hasPowerHarvest=${hasPH} banks=${bankCount}`);
+                // lightweight debug: presence of powerHarvest is available via room.memory.powerHarvest
             } catch (e) {}
 
              if (!room.memory.powerHarvest) {
@@ -643,9 +781,41 @@ export class PowerHarvestOperation extends Operation {
                  if (bank.claimedBy && bank.claimedBy !== room.name) {
                      bank.claimedBy = room.name;
                  }
-                 console.log(`PowerHarvestOperation in room ${room.name} managing bank in ${bank.room} at (${bank.pos.x},${bank.pos.y}) state: ${bank.state} claimedBy=${bank.claimedBy} ticksToDecay=${bank.ticksToDecay} power=${bank.power}`);
+                 //console.log(`PowerHarvestOperation in room ${room.name} managing bank in ${bank.room} at (${bank.pos.x},${bank.pos.y}) state: ${bank.state} claimedBy=${bank.claimedBy} ticksToDecay=${bank.ticksToDecay} power=${bank.power}`);
                  // Verbose: show existing hauler/fighter/healer counts
-                 console.log(`  fighters=${bank.fighterNames?.length || 0}, healers=${bank.healerNames?.length || 0}, haulers=${bank.haulerNames?.length || 0}`);
+                 //console.log(`  fighters=${bank.fighterNames?.length || 0}, healers=${bank.healerNames?.length || 0}, haulers=${bank.haulerNames?.length || 0}`);
+                 // append a per-iteration seen event so timeline includes TTL updates
+                 this.appendTimeline(bank, 'seen', { ticksToDecay: bank.ticksToDecay, power: bank.power });
+
+                 // Sync live creeps into bank memory arrays so we don't lose track of active breakers/haulers
+                 try {
+                     if (!bank.fighterNames) bank.fighterNames = [];
+                     if (!bank.healerNames) bank.healerNames = [];
+                     if (!bank.haulerNames) bank.haulerNames = [];
+                     for (const cname in Game.creeps) {
+                         const c = Game.creeps[cname];
+                         if (!c || !c.memory) continue;
+                         // fighters
+                         if (c.memory.role === 'powerFighter' && c.memory.targetRoom === bank.room && !bank.fighterNames.includes(cname)) {
+                             bank.fighterNames.push(cname);
+                         }
+                         // healers
+                         if (c.memory.role === 'powerHealer' && c.memory.targetRoom === bank.room && !bank.healerNames.includes(cname)) {
+                             bank.healerNames.push(cname);
+                         }
+                         // haulers
+                         if (c.memory.role === 'powerHauler' && (c.memory.targetRoom === bank.room || (c.memory as any).targetRoom === bank.room) && !bank.haulerNames.includes(cname)) {
+                             bank.haulerNames.push(cname);
+                         }
+                     }
+                     // If we have fighters or healers present, ensure state reflects breaking
+                     if ((bank.fighterNames && bank.fighterNames.length > 0) || (bank.healerNames && bank.healerNames.length > 0)) {
+                         if (bank.state !== 'breaking') {
+                             bank.state = 'breaking';
+                             this.appendTimeline(bank, 'start_breaking');
+                         }
+                     }
+                 } catch (e) {}
                  this.spawnBreakers(room, bank);
                  this.spawnHaulers(room, bank);
                  this.runFighter(bank);
@@ -659,6 +829,8 @@ export class PowerHarvestOperation extends Operation {
                      if (haulersDone && powerBankGone) {
                          bank.state = "done";
                          bank.claimedBy = undefined;
+                         // log done state unconditionally to avoid TS narrowing errors
+                         this.appendTimeline(bank, 'done');
                      }
                  }
              }

@@ -4,9 +4,16 @@ import { E31N2 } from "../roomconfigs/E31N2";
 import { E31N3 } from "../roomconfigs/E31N3";
 import { E31N4 } from "../roomconfigs/E31N4";
 import { E32N3 } from "../roomconfigs/E32N3";
+import { E32N2 } from "../roomconfigs/E32N2";
 import { E32N4 } from "../roomconfigs/E32N4";
 import { E33N5 } from "../roomconfigs/E33N5";
 import { E37S1 } from "../roomconfigs/E37S1";
+import { E29N4 } from "../roomconfigs/E29N4";
+import { E25N11 } from "../roomconfigs/E25N11";
+import { E33N2 } from "../roomconfigs/E33N2";
+import { E33N3 } from "../roomconfigs/E33N3";
+import { E33S1 } from "../roomconfigs/E33S1";
+import { E33N4 } from "../roomconfigs/E33N4";
 import { ricaneroom } from "./ricaneroom";
 
 // Interface for room config classes
@@ -19,15 +26,22 @@ interface RoomConfigClass {
 const ROOMS = [
   // Rooms with full initialization (config + data + nextTrade)
   { name: "E31N1", config: E31N1, needsData: true },
+  { name: "E31N2", config: E31N2, needsData: false },
   { name: "E31N3", config: E31N3, needsData: true },
   { name: "E28S1", config: E28S1, needsData: true },
   { name: "E37S1", config: E37S1, needsData: true },
   { name: "E33N5", config: E33N5, needsData: true },
   { name: "E32N4", config: E32N4, needsData: true },
+  { name: "E25N11", config: E25N11, needsData: true },
   // Rooms with config only
-  { name: "E31N2", config: E31N2, needsData: false },
   { name: "E32N3", config: E32N3, needsData: false },
-  { name: "E31N4", config: E31N4, needsData: false }
+  { name: "E32N2", config: E32N2, needsData: true },
+  { name: "E31N4", config: E31N4, needsData: false },
+  { name: "E29N4", config: E29N4, needsData: false },
+  { name: "E33N2", config: E33N2, needsData: false },
+  { name: "E33N3", config: E33N3, needsData: false },
+    { name: "E33N3", config: E33N4, needsData: false },
+  { name: "E33S1", config: E33S1, needsData: false }
 ];
 
 // Helper function to initialize room data with default values
@@ -166,15 +180,35 @@ function buildEnergySourcesForRoom(room: Room): any[] {
 
     // If room.memory.sources has container info, use that for parking
     if (room.memory.sources && room.memory.sources[s.id]) {
-      const cont = room.memory.sources[s.id].container;
+      const memSrc = room.memory.sources[s.id];
+      const cont = memSrc.container;
       if (cont) {
         entry.parkingspots = [ { x: cont.x, y: cont.y } ];
-        // Try to find a link near the container
-        const link = room.find<StructureLink>(FIND_STRUCTURES, {
-          filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(cont.x, cont.y) < 4
-        })[0];
-        if (link) {
-          entry.linkpos = { x: link.pos.x, y: link.pos.y };
+        // If memory explicitly records a link position for this source, prefer that exact link first
+        if ((memSrc as any).linkpos) {
+          const lx = (memSrc as any).linkpos.x;
+          const ly = (memSrc as any).linkpos.y;
+          const structs = room.lookForAt(LOOK_STRUCTURES, lx, ly) as Structure[];
+          const exactLink = structs.find(sst => (sst.structureType === STRUCTURE_LINK)) as StructureLink | undefined;
+          if (exactLink) {
+            entry.linkpos = { x: exactLink.pos.x, y: exactLink.pos.y };
+          } else {
+            // Try to find a link near the container (previous behavior)
+            const link = room.find<StructureLink>(FIND_STRUCTURES, {
+              filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(cont.x, cont.y) < 4
+            })[0];
+            if (link) {
+              entry.linkpos = { x: link.pos.x, y: link.pos.y };
+            }
+          }
+        } else {
+          // Try to find a link near the container
+          const link = room.find<StructureLink>(FIND_STRUCTURES, {
+            filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(cont.x, cont.y) < 4
+          })[0];
+          if (link) {
+            entry.linkpos = { x: link.pos.x, y: link.pos.y };
+          }
         }
       }
     } else {
@@ -195,7 +229,7 @@ function buildEnergySourcesForRoom(room: Room): any[] {
   return energysources;
 }
 
-// Resolve a room's config: if the room uses a template, translate template coords into absolute positions
+// Resolve a room's config: if the room uses a template, translate template coords into concrete positions
 function resolveTemplateConfig(room: Room): any {
   if (!room || !room.memory || !room.memory.config) return null;
   const memcfg = room.memory.config;
@@ -349,5 +383,23 @@ export var RoomHelper = {
   // Backwards compatible alias: keep getRoomConfig but delegate to getRoomValues
   getRoomConfig: function(room: Room) {
     return this.getRoomValues(room);
+  },
+
+  // Get config by room name, even if room is not visible
+  getRoomConfigByName: function(roomName: string) {
+    // First, check if room is visible and has config
+    const room = Game.rooms[roomName];
+    if (room) {
+      return this.getRoomConfig(room);
+    }
+
+    // If not visible, look up in static configs
+    const roomEntry = ROOMS.find(r => r.name === roomName);
+    if (roomEntry) {
+      return roomEntry.config.getConfig();
+    }
+
+    // No config found
+    return null;
   }
 };

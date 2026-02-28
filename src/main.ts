@@ -103,6 +103,9 @@ declare global {
         healerNames?: string[];
         haulerNames?: string[];
         claimedBy?: string;
+        // timeline is an array of recent events for this bank useful for debugging/tuning
+        // each entry records the tick, a short event name, and an optional value
+        timeline?: { tick: number; event: string; value?: any }[];
     }
 
     interface PowerHarvestMemory {
@@ -184,7 +187,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
     };
 
     // Very early debug: confirm main loop is executing
-    try { console.log(`Main loop tick ${Game.time} starting. CPU bucket=${Game.cpu.bucket}`); } catch (e) {}
+    //try { console.log(`Main loop tick ${Game.time} starting. CPU bucket=${Game.cpu.bucket}`); } catch (e) {}
 
     // Automatically delete memory of missing creeps
     for (const name in Memory.creeps) {
@@ -196,7 +199,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
     // Debug: count owned rooms
     try {
         const ownedRooms = Object.values(Game.rooms).filter(r => r.controller && r.controller.my).map(r => r.name);
-        console.log(`Owned rooms: ${ownedRooms.length} ${ownedRooms.join(', ')}`);
+        //console.log(`Owned rooms: ${ownedRooms.length} ${ownedRooms.join(', ')}`);
     } catch (e) {}
 
   // Display current game tick to the console.
@@ -224,7 +227,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
   // Load system level tasks for game
   let operations = OperationHelper.getOperations()
-  try { console.log(`Instantiated ${operations.length} operations: ${operations.map(op => op.name).join(', ')}`); } catch(e) {}
+  //try { console.log(`Instantiated ${operations.length} operations: ${operations.map(op => op.name).join(', ')}`); } catch(e) {}
 
   /////console.log(` `);
   /////console.log(`********  Operation Initialization  ********`);
