@@ -1,4 +1,17 @@
-export type MarketManagedResource = "energy" | "H" | "O" | "Z" | "K" | "U" | "L" | "X" | "power";
+export type MarketManagedResource =
+  | "energy"
+  | "H"
+  | "O"
+  | "Z"
+  | "K"
+  | "U"
+  | "L"
+  | "X"
+  | "power"
+  | "mist"
+  | "biomass"
+  | "metal"
+  | "silicon";
 
 export interface MarketResourcePolicy {
   terminalTarget: number;
@@ -31,7 +44,21 @@ export interface AmountReserveConstraints {
   transactionCost: (amount: number) => number;
 }
 
-export const MARKET_MANAGED_RESOURCES: MarketManagedResource[] = ["energy", "H", "O", "Z", "K", "U", "L", "X", "power"];
+export const MARKET_MANAGED_RESOURCES: MarketManagedResource[] = [
+  "energy",
+  "H",
+  "O",
+  "Z",
+  "K",
+  "U",
+  "L",
+  "X",
+  "power",
+  "mist",
+  "biomass",
+  "metal",
+  "silicon"
+];
 
 export const ENERGY_STORAGE_RESERVE = 800000;
 export const MARKET_STORAGE_ENERGY_RESERVE = 200000;
@@ -98,6 +125,30 @@ export const MARKET_RESOURCE_POLICIES: Record<MarketManagedResource, MarketResou
     terminalReserve: RESOURCE_TERMINAL_RESERVE,
     transferThreshold: RESOURCE_TERMINAL_RESERVE,
     maxTransfer: 2000
+  },
+  mist: {
+    terminalTarget: 0,
+    terminalReserve: 0,
+    transferThreshold: 0,
+    maxTransfer: 0
+  },
+  biomass: {
+    terminalTarget: 0,
+    terminalReserve: 0,
+    transferThreshold: 0,
+    maxTransfer: 0
+  },
+  metal: {
+    terminalTarget: 0,
+    terminalReserve: 0,
+    transferThreshold: 0,
+    maxTransfer: 0
+  },
+  silicon: {
+    terminalTarget: 0,
+    terminalReserve: 0,
+    transferThreshold: 0,
+    maxTransfer: 0
   }
 };
 
@@ -132,7 +183,7 @@ export function getNetworkResourceReserve(
     );
   }
 
-  return rooms.filter(room => room.hasTerminal).length * RESOURCE_NETWORK_RESERVE;
+  return rooms.filter(room => room.hasTerminal).length * MARKET_RESOURCE_POLICIES[resource].terminalTarget;
 }
 
 export function getNetworkResourceSurplus(

@@ -4,7 +4,7 @@
 
 Turn DepositFarmer from a single hard-coded room assignment into a safe, observable operation that discovers nearby deposits, evaluates whether they are worth harvesting, and coordinates a miner from a suitable owned room.
 
-**Implementation status: Implemented.** DepositFarmer now scans reachable rooms through owned observers, stores sightings and assignments in memory, coordinates overlapping scan requests with global timestamps, plans at most one miner per home, and runs miners through persisted travel/harvest/return/unload/retire states. The typed [`DEPOSIT_FARMER_POLICY`](../../src/operations/DepositFarmerTypes.ts) currently enables the operation with a 10-room observer range, 4,000 minimum CPU bucket for scans, 100,000 storage-energy reserve, one miner per home, 500-tick maximum sighting age, and conservative travel/lifetime margins. Tune these values from live observations.
+**Implementation status: Implemented.** DepositFarmer now scans reachable rooms through owned observers, stores sightings and assignments in memory, coordinates overlapping scan requests with global timestamps, plans at most one miner per home, and runs miners through persisted travel/harvest/return/unload/retire states. Deposit resources are unloaded into terminals first; GroundSupport moves existing storage stock to the terminal when capacity is available. The typed [`DEPOSIT_FARMER_POLICY`](../../src/operations/DepositFarmerTypes.ts) currently enables the operation with a 10-room observer range, 4,000 minimum CPU bucket for scans, 100,000 storage-energy reserve, one miner per home, 500-tick maximum sighting age, and conservative travel/lifetime margins. Tune these values from live observations.
 
 ## Current behavior and findings
 
@@ -61,7 +61,7 @@ Persist only the data needed across global resets: scan timestamps, pending obse
 - Store `homeRoom`, `targetRoom`, stable deposit identity/position, resource type, and state on creep memory. Use states such as `travelling`, `harvesting`, `returning`, `unloading`, and `retiring`; recover or reconcile invalid state after resets.
 - Target the assigned deposit rather than `targets[0]`. Handle not-visible, missing, depleted, cooldown, pathing, and action-error outcomes explicitly; refresh or abandon the assignment when appropriate.
 - Return based on cargo, remaining lifetime versus round-trip time, deposit lifetime, and a configurable safety margin rather than only full capacity or a fixed 250-tick threshold.
-- Unload all carried resources with checked transfer results. Prefer storage, then a configured terminal/container fallback when valid; if no destination can accept cargo, remain in a safe recovery state and report the blocker.
+- Unload all carried resources with checked transfer results. Prefer the terminal for deposit resources so market-eligible stock is immediately available; fall back to storage if terminal capacity is unavailable. GroundSupport separately moves existing deposit-resource stock from storage to terminal when capacity is available and higher-priority room tasks are clear.
 - Remove obsolete imports/fields and replace broad resource-type casts with the project's resource typing where practical.
 
 ### 5. Make spawning policy deliberate

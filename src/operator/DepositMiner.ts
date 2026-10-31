@@ -75,7 +75,7 @@ export class DepositMiner extends Operator {
     }
 
     const resource = resources[0];
-    const sinks = [this.room.storage, this.room.terminal].filter(
+    const sinks = [this.room.terminal, this.room.storage].filter(
       (structure): structure is StructureStorage | StructureTerminal =>
         structure !== undefined && (structure.store.getFreeCapacity(resource) || 0) > 0
     );

@@ -35,6 +35,20 @@ describe("resource management policy", () => {
     assert.strictEqual(getNetworkResourceSurplus(rooms, "H"), 8000);
   });
 
+  it("does not reserve deposit resources that are configured for sale", () => {
+    const depositStock: MarketRoomInventory[] = [
+      {
+        hasStorage: true,
+        hasTerminal: true,
+        storage: { biomass: 5000 },
+        terminal: { biomass: 3000 }
+      }
+    ];
+
+    assert.strictEqual(getNetworkResourceReserve(depositStock, "biomass"), 0);
+    assert.strictEqual(getNetworkResourceSurplus(depositStock, "biomass"), 8000);
+  });
+
   it("uses the median of recent days with actual market activity", () => {
     const history = [
       { date: "2026-10-22", transactions: 1, avgPrice: 200 },

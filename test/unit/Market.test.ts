@@ -127,6 +127,33 @@ describe("market operation", () => {
     assert.deepEqual(marketState.deals, ["h-order"]);
   });
 
+  it("sells all deposit-resource types when profitable buy orders are available", () => {
+    const resources: DepositConstant[] = ["mist", "biomass", "metal", "silicon"];
+    const rooms: Record<string, ReturnType<typeof createRoom>> = {};
+    const orders: Order[] = resources.map((resource, index) => {
+      const roomName = `E${index + 1}N1`;
+      rooms[roomName] = createRoom(roomName, { energy: 50000, [resource]: 3000 });
+      return {
+        id: `${resource}-order`,
+        created: 1,
+        type: "buy",
+        resourceType: resource,
+        roomName: "E9N9",
+        amount: 1000,
+        remainingAmount: 1000,
+        price: 2
+      };
+    });
+    setMarketEnvironment(rooms, orders);
+
+    new Market().actions();
+
+    assert.sameMembers(
+      marketState.deals,
+      resources.map(resource => `${resource}-order`)
+    );
+  });
+
   it("does not sell below the recent median or through the protected terminal reserve", () => {
     const belowMedianRoom = createRoom("E1N1", { energy: 50000, H: 12000 });
     const belowMedianOrder: Order = {

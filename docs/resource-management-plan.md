@@ -15,7 +15,7 @@ Keep owned rooms supplied for survival, spawning, construction, labs, and planne
 
 ## Proposed policy
 
-**Implementation status: Implemented.** The policy is in [`ResourceManagement.ts`](../src/utils/ResourceManagement.ts) and runs through [`Market.ts`](../src/operations/Market.ts). The rollout uses the approved conservative scope: raw minerals (H/O/Z/K/U/L/X), power, and energy may be sold only after their reserves and visible terminal deficits are protected. Other resources, including compounds, are not eligible for sale.
+**Implementation status: Implemented.** The policy is in [`ResourceManagement.ts`](../src/utils/ResourceManagement.ts) and runs through [`Market.ts`](../src/operations/Market.ts). Energy, raw minerals (H/O/Z/K/U/L/X), power, and all four deposit resources (mist, biomass, metal, and silicon) are eligible for sale. Deposit resources have no protected market reserve or terminal target, so available stock is sold when market-history, buy-order, and transaction-cost checks pass. Compound resources remain ineligible.
 
 ### 1. Build one inventory and demand view
 
@@ -28,7 +28,7 @@ Use explicit typed policy data for:
 - **Surplus:** stock above the target and reserve that can be redistributed or sold.
 - **Maximum terminal stock:** a per-resource cap that avoids filling terminals with inventory that belongs in storage or should be sold.
 
-Use resource-specific policies rather than assuming every non-energy resource is interchangeable. Energy targets 30,000 in each terminal, transfers only from above 50,000, keeps at least 50,000 in the sending terminal, and reserves 30,000 energy per terminal network-wide. The market protects 200,000 energy in each storage before selling; this is deliberately separate from the 800,000 upgrader-spawn threshold. Raw minerals and power target 2,000, transfer only from above 10,000, and retain at least 10,000 in the sending terminal. Unknown owned rooms add conservative reserves to the network calculation.
+Use resource-specific policies rather than assuming every non-energy resource is interchangeable. Energy targets 30,000 in each terminal, transfers only from above 50,000, keeps at least 50,000 in the sending terminal, and reserves 30,000 energy per terminal network-wide. The market protects 200,000 energy in each storage before selling; this is deliberately separate from the 800,000 upgrader-spawn threshold. Raw minerals and power target 2,000, transfer only from above 10,000, and retain at least 10,000 in the sending terminal. Deposit resources have zero target/reserve and are sold from terminal stock; GroundSupport moves existing storage stock to the terminal when it has capacity, and deposit miners unload to terminal first.
 
 ### 2. Apply decisions in a fixed priority order
 
@@ -69,7 +69,7 @@ Keep the market operation early enough in the action phase to run reliably, but 
 
 1. **Balancing and typed policy — complete:** check API results; count one attempted action per sending terminal per market pass; apply energy and resource reserves.
 2. **Inventory and reserve accounting — complete:** aggregate storage and terminal stock across visible owned rooms, add reserves for remembered unseen owned rooms, and use pure helper functions for surplus and amount limits.
-3. **Conservative sales — complete:** sell energy, raw minerals, and power from terminals only when network surplus, order-book, recent-median, and transaction-cost checks pass. Energy storage reserve is 200,000 per room, separate from the larger upgrader-spawn threshold; debug output reports network energy inventory, protected reserve, and available surplus.
+3. **Conservative sales — complete:** sell energy, raw minerals, power, and deposit resources from terminals only when network surplus, order-book, recent-median, and transaction-cost checks pass. Energy storage reserve is 200,000 per room, separate from the larger upgrader-spawn threshold; debug output reports network energy inventory, protected reserve, and available surplus.
 4. **Expansion by evidence — deferred:** add new resources only when their production/consumption and reserve rules are understood.
 5. **Persistent sell orders or purchasing — deferred:** these need separate order reconciliation, stale-order cleanup, credit budgets, and monitoring.
 

@@ -1,6 +1,8 @@
 import { Operator } from "../classes/operator";
 import { RoomHelper } from "../utils/RoomHelper";
 
+const DEPOSIT_MARKET_RESOURCES: DepositConstant[] = ["mist", "biomass", "metal", "silicon"];
+
 export class GroundSupportCreep extends Creep {
     memory!: CreepMemory & {
         task?: string | null;
@@ -51,6 +53,7 @@ export class GroundSupport extends Operator {
                     case 'FILL_POWER_SPAWW_ENERGY': this.fillPowerSpawnEnergyAction(); break;
                     case 'FILL_POWER_SPAWN_POWER': this.fillPowerSpawnPowerAction(); break;
                     case 'FILL_TERMINAL_RESOURCES_FROM_STORAGE': this.fillTerminalResourcesFromStorageAction(); break;
+                    case 'OFFLOAD_DEPOSIT_RESOURCES_TO_TERMINAL': this.offloadDepositResourcesToTerminalAction(); break;
 
                     default:
                         // Unknown task, clear it
@@ -179,6 +182,11 @@ export class GroundSupport extends Operator {
         if (this.towerCheck()) {
             console.log(`${this.room.name} GroundSupport 15. Tower levels.`);
             this.creep.memory.task = 'FILL_TOWERS';
+            return;
+        }
+
+        if (this.depositResourcesNeedMarketCheck()) {
+            this.creep.memory.task = 'OFFLOAD_DEPOSIT_RESOURCES_TO_TERMINAL';
             return;
         }
 
@@ -933,16 +941,19 @@ export class GroundSupport extends Operator {
 
     private roomTerminalResourceLowCheck(): boolean {
 
-        // Loop through all resources in storage and check to see if terminal needs it to reach 10k of that energy.
+        // Keep ordinary non-energy resources stocked independently from deposit sales.
         if (!this.room.storage || !this.room.terminal) {
             return false;
         }
 
         for (const resourceType in this.room.storage.store) {
-            const resource = resourceType as ResourceConstant;
-            if (resource === RESOURCE_ENERGY) {
+            if (
+                resourceType === RESOURCE_ENERGY ||
+                DEPOSIT_MARKET_RESOURCES.some(depositResource => depositResource === resourceType)
+            ) {
                 continue;
             }
+            const resource = resourceType as ResourceConstant;
             if (this.room.storage.store.getUsedCapacity(resource)! > 0) {
                 const terminalAmount = this.room.terminal.store.getUsedCapacity(resource)!;
                 if (terminalAmount < 20000) {
@@ -963,10 +974,13 @@ export class GroundSupport extends Operator {
         }
 
         for (const resourceType in this.room.storage.store) {
-            const resource = resourceType as ResourceConstant;
-            if (resource === RESOURCE_ENERGY) {
+            if (
+                resourceType === RESOURCE_ENERGY ||
+                DEPOSIT_MARKET_RESOURCES.some(depositResource => depositResource === resourceType)
+            ) {
                 continue;
             }
+            const resource = resourceType as ResourceConstant;
             if (this.room.storage.store.getUsedCapacity(resource)! > 0) {
                 const terminalAmount = this.room.terminal.store.getUsedCapacity(resource)!;
                 if (terminalAmount < 20000) {
@@ -992,6 +1006,96 @@ export class GroundSupport extends Operator {
                     }
                 }
             }
+        }
+        this.clearCreepTask(this.creep);
+    }
+
+    private depositResourcesNeedMarketCheck(): boolean {
+        const storage = this.room.storage;
+        const terminal = this.room.terminal;
+        const creep = this.creep;
+        if (
+            storage &&
+            creep &&
+            DEPOSIT_MARKET_RESOURCES.some(resource => (creep.store.getUsedCapacity(resource) || 0) > 0)
+        ) {
+            return true;
+        }
+        if (!storage || !terminal || (terminal.store.getFreeCapacity() || 0) <= 0) return false;
+
+        return DEPOSIT_MARKET_RESOURCES.some(
+            resource =>
+                (storage.store.getUsedCapacity(resource) || 0) > 0 &&
+                (terminal.store.getFreeCapacity(resource) || 0) > 0
+        );
+    }
+
+    private offloadDepositResourcesToTerminalAction(): void {
+        const creep = this.creep;
+        const storage = this.room.storage;
+        const terminal = this.room.terminal;
+        if (!creep || !storage) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        const carriedResource = DEPOSIT_MARKET_RESOURCES.find(
+            candidate => (creep.store.getUsedCapacity(candidate) || 0) > 0
+        );
+        const resource =
+            carriedResource ||
+            (terminal &&
+                DEPOSIT_MARKET_RESOURCES.find(
+                    candidate =>
+                        (storage.store.getUsedCapacity(candidate) || 0) > 0 &&
+                        (terminal.store.getFreeCapacity(candidate) || 0) > 0
+                ));
+        if (!resource) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        if (carriedResource) {
+            const target =
+                terminal && (terminal.store.getFreeCapacity(resource) || 0) > 0 ? terminal : storage;
+            const result = creep.transfer(target, resource);
+            if (result === ERR_NOT_IN_RANGE) {
+                creep.moveTo(target, { visualizePathStyle: { stroke: '#00ff00' } });
+            } else if (result === OK) {
+                this.clearCreepTask(creep);
+            } else {
+                console.log(`[${this.room.name}] GroundSupport could not move ${resource} to destination: ${result}`);
+                if (result !== ERR_FULL) this.clearCreepTask(creep);
+            }
+            return;
+        }
+
+        if (!terminal) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        if ((terminal.store.getFreeCapacity(resource) || 0) <= 0) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        const amount = Math.min(
+            creep.store.getFreeCapacity() || 0,
+            storage.store.getUsedCapacity(resource) || 0,
+            terminal.store.getFreeCapacity(resource) || 0
+        );
+        if (amount <= 0) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        const withdrawalResult = creep.withdraw(storage, resource, amount);
+        if (withdrawalResult === ERR_NOT_IN_RANGE) {
+            creep.moveTo(storage, { visualizePathStyle: { stroke: '#ffaa00' } });
+        } else if (withdrawalResult !== OK) {
+            console.log(`[${this.room.name}] GroundSupport could not withdraw ${resource}: ${withdrawalResult}`);
+            this.clearCreepTask(creep);
         }
     }
 
