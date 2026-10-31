@@ -50,6 +50,7 @@ export class GroundSupport extends Operator {
                     case 'FILL_TOWERS': this.fillTowerAction(); break;
                     case 'FILL_POWER_SPAWW_ENERGY': this.fillPowerSpawnEnergyAction(); break;
                     case 'FILL_POWER_SPAWN_POWER': this.fillPowerSpawnPowerAction(); break;
+                    case 'FILL_TERMINAL_RESOURCES_FROM_STORAGE': this.fillTerminalResourcesFromStorageAction(); break;
 
                     default:
                         // Unknown task, clear it
@@ -181,6 +182,12 @@ export class GroundSupport extends Operator {
             return;
         }
 
+        // 16. Room terminal low resource check (non-energy)
+        if (this.roomTerminalResourceLowCheck()) {
+            console.log(`${this.room.name} GroundSupport 16: Resource Low.`);
+            this.creep.memory.task = 'FILL_TERMINAL_RESOURCES_FROM_STORAGE';
+            return;
+        }
 
         // console.log(`${this.room.name} GroundSupport: Sleeping.`);
     }
@@ -265,11 +272,10 @@ export class GroundSupport extends Operator {
         }
 
         // Abundantly full storage with energy, move over if terminal has room
-
         const storageEnergy = this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
-        if (storageEnergy > 650000) {
+        if (storageEnergy > 250000) {
             // If there is a place to get the energy from, then return true.
-            if (this.room.terminal && this.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) < 50000 && this.room.terminal.store.getFreeCapacity() > 70000) {
+            if (this.room.terminal && this.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) < 50000 && this.room.terminal.store.getFreeCapacity() > 10000) {
                 return true;
             }
         }
@@ -327,6 +333,9 @@ export class GroundSupport extends Operator {
         if (!this.roomValues) {
             return false;
         }
+        if (this.room.storage && this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 800) {
+            return false;
+        }
 
         let fieldLinkPos = this.roomValues.fieldLinks[0];
         let fieldLink1 =  this.room.find<StructureLink>(FIND_STRUCTURES, {
@@ -356,6 +365,10 @@ export class GroundSupport extends Operator {
                 s.pos.y === fieldLinkPos.y
         })[0] || null;
         if (!fieldLink1) {
+            return;
+        }
+        if (this.room.storage && this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 800) {
+            this.clearCreepTask(this.creep);
             return;
         }
 
@@ -470,6 +483,9 @@ export class GroundSupport extends Operator {
         if (!this.roomValues) {
             return false;
         }
+        if (this.room.storage && this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 800) {
+            return false;
+        }
 
         let fieldLinkPos = this.roomValues.fieldLinks[1];
         let fieldLink2 =  this.room.find<StructureLink>(FIND_STRUCTURES, {
@@ -499,6 +515,10 @@ export class GroundSupport extends Operator {
                 s.pos.y === fieldLinkPos.y
         })[0] || null;
         if (!fieldLink2) {
+            return;
+        }
+        if (this.room.storage && this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 800) {
+            this.clearCreepTask(this.creep);
             return;
         }
 
@@ -724,6 +744,11 @@ export class GroundSupport extends Operator {
 
         if (this.clearNonEnergyResources()) { return; }
 
+        if (this.room.storage && this.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 800) {
+            this.clearCreepTask(this.creep);
+            return;
+        }
+
         const towers = this.room.find<StructureTower>(FIND_STRUCTURES, {
             filter: s => s.structureType === STRUCTURE_TOWER &&
                 s.store.getFreeCapacity(RESOURCE_ENERGY) > 200
@@ -904,6 +929,70 @@ export class GroundSupport extends Operator {
         }
         this.clearCreepTask(this.creep);
         return;
+    }
+
+    private roomTerminalResourceLowCheck(): boolean {
+
+        // Loop through all resources in storage and check to see if terminal needs it to reach 10k of that energy.
+        if (!this.room.storage || !this.room.terminal) {
+            return false;
+        }
+
+        for (const resourceType in this.room.storage.store) {
+            const resource = resourceType as ResourceConstant;
+            if (resource === RESOURCE_ENERGY) {
+                continue;
+            }
+            if (this.room.storage.store.getUsedCapacity(resource)! > 0) {
+                const terminalAmount = this.room.terminal.store.getUsedCapacity(resource)!;
+                if (terminalAmount < 20000) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private fillTerminalResourcesFromStorageAction(): void {
+
+        if (!this.creep || !this.room.storage || !this.room.terminal) {
+            // clear task if something is missing
+            this.clearCreepTask(this.creep);
+            return;
+        }
+
+        for (const resourceType in this.room.storage.store) {
+            const resource = resourceType as ResourceConstant;
+            if (resource === RESOURCE_ENERGY) {
+                continue;
+            }
+            if (this.room.storage.store.getUsedCapacity(resource)! > 0) {
+                const terminalAmount = this.room.terminal.store.getUsedCapacity(resource)!;
+                if (terminalAmount < 20000) {
+
+                    // If creep is empty, go get resource from storage
+                    if (this.creep.store.getUsedCapacity() === 0) {
+                        if (this.creep.withdraw(this.room.storage, resource) === ERR_NOT_IN_RANGE) {
+                            this.creep.moveTo(this.room.storage, { visualizePathStyle: { stroke: '#ffaa00' } });
+                        }
+                        return;
+                    }
+
+                    // If creep is full or has some energy, go fill terminal
+                    if (this.creep.store.getUsedCapacity() > 0) {
+                        let result = this.transferAll(this.room.terminal);
+                        if (result === ERR_NOT_IN_RANGE) {
+                            this.creep.moveTo(this.room.terminal, { visualizePathStyle: { stroke: '#00ff00' } });
+                        } else if (result === OK) {
+                            // Successfully transferred all energy, clear task
+                            this.clearCreepTask(this.creep);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
     }
 
 

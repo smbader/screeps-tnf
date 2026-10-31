@@ -15,9 +15,9 @@ export class ExpansionManagement extends Operation {
         //        {x: 48, y: 18, room: 'E25N11', shard: "1"},
         //    ] },
         //{ target: 'E32N2', source: 'E31N3', forcespawn: true, waypoints: [] },
-        { target: 'E31N2', source: 'E31N1', forcespawn: true, waypoints: [] },
+        //{ target: 'E31N2', source: 'E31N1', forcespawn: true, waypoints: [] },
         ///{ target: 'E33S1', source: 'E31N1', forcespawn: true, waypoints: [] },
-        //{ target: 'E33S1', source: 'E31N1', forcespawn: true, waypoints: [] },
+        /////{ target: 'E33S1', source: 'E31N1', forcespawn: true, waypoints: [] },
         //{ target: 'E32N4', source: 'E31N3', forcespawn: true, waypoints: [] },
     ];
 
@@ -94,7 +94,7 @@ export class ExpansionManagement extends Operation {
 
                     if ((operationOperator as any).constructor.name === 'RemoteWorker') {
                         if (operationOperator.room.storage && operationOperator.room.controller &&
-                            operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000) {
+                            operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000) {
 
                             if (operationOperator.room.controller.level > 5) {
                                 console.log(`    Spawning: ` + operationOperator.name);

@@ -59,10 +59,15 @@ export class RoomArcher extends Operator {
                 filter: (c) => c.hits < c.hitsMax
             });
             if (damagedCreep) {
-                this.creep.heal(damagedCreep);
+                if (this.creep.heal(damagedCreep) === OK) {
+
+                } else {
+                    this.creep.heal(this.creep);
+                }
+            } else {
+                this.creep.heal(this.creep);
             }
         }
-
 
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.waypoints != undefined) {

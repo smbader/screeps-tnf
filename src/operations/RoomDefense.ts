@@ -60,7 +60,7 @@ export class RoomDefense extends Operation {
                       if (!target) continue;
 
                       let range = tower.pos.getRangeTo(target);
-                      if (range < 40 || (target.hits < (target.hitsMax * 0.75) && range < 30) || (target.hits < (target.hitsMax * 0.5) && range < 35) || target.getActiveBodyparts(CLAIM) > 0) {
+                      if (range < 20 || (target.hits < (target.hitsMax * 0.75) && range < 30) || (target.hits < (target.hitsMax * 0.5) && range < 40) || target.getActiveBodyparts(CLAIM) > 0) {
 
                           const result = tower.attack(target);
                           if (result === OK) {

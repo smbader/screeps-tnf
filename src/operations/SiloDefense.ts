@@ -148,13 +148,13 @@ export class SiloDefense extends Operation {
                 // If the creep has no energy move to the harvest spot. If already at the harvest spot, harvest from the source.
                 if (creep.store.getUsedCapacity() == 0 && !isOnHarvestSpot) {
                     creep.moveTo(roomInfo.harvestSpot.x, roomInfo.harvestSpot.y);
-                    console.log(`Moving silo defender ${creepName} to harvest spot in room ${roomInfo.roomName}`);
+                    //console.log(`Moving silo defender ${creepName} to harvest spot in room ${roomInfo.roomName}`);
                 } else if (creep.store.getUsedCapacity() < creep.store.getCapacity() && isOnHarvestSpot) {
                     creep.harvest(source);
-                    console.log(`Harvesting energy with silo defender ${creepName} in room ${roomInfo.roomName}`);
+                    //console.log(`Harvesting energy with silo defender ${creepName} in room ${roomInfo.roomName}`);
                 } else if (creep.store.getFreeCapacity() == 0 && !isOnLoadingSpot) {
                     creep.moveTo(roomInfo.loadingSpot.x, roomInfo.loadingSpot.y);
-                    console.log(`Moving silo defender ${creepName} to loading spot in room ${roomInfo.roomName}`);
+                    //console.log(`Moving silo defender ${creepName} to loading spot in room ${roomInfo.roomName}`);
                 } else if (creep.store.getUsedCapacity() > 0 && isOnLoadingSpot) {
 
                     // Loop trough towers array and save the tower that needs the most energy.
@@ -173,10 +173,10 @@ export class SiloDefense extends Operation {
                     // Transfer energy to spawn if it's needed
                     if (spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
                         creep.transfer(spawn, RESOURCE_ENERGY);
-                        console.log(`Transferring energy to spawn with silo defender ${creepName} in room ${roomInfo.roomName}`);
+                        //console.log(`Transferring energy to spawn with silo defender ${creepName} in room ${roomInfo.roomName}`);
                     } else if (towerToFill) {
                         creep.transfer(towerToFill, RESOURCE_ENERGY);
-                        console.log(`Transferring energy to tower with silo defender ${creepName} in room ${roomInfo.roomName}`);
+                        //console.log(`Transferring energy to tower with silo defender ${creepName} in room ${roomInfo.roomName}`);
                     } else {
                         // Find all positions listed and verify a rampart is present. If not, construct a rampart. If all positions have ramparts, build the one with the least hits.
                         let rampartToRepair = null;
@@ -196,7 +196,7 @@ export class SiloDefense extends Operation {
                                     console.log(`Creating rampart construction site at (${pos.x}, ${pos.y}) with silo defender ${creepName} in room ${roomInfo.roomName}`);
                                 } else {
                                     creep.build(rampartSite);
-                                    console.log(`Building rampart construction site at (${pos.x}, ${pos.y}) with silo defender ${creepName} in room ${roomInfo.roomName}`);
+                                    //console.log(`Building rampart construction site at (${pos.x}, ${pos.y}) with silo defender ${creepName} in room ${roomInfo.roomName}`);
                                 }
                                 continue;
                             }
@@ -214,7 +214,7 @@ export class SiloDefense extends Operation {
 
                         if (rampartToRepair) {
                             creep.repair(rampartToRepair);
-                            console.log(`Repairing rampart at (${rampartToRepair.pos.x}, ${rampartToRepair.pos.y}) with silo defender ${creepName} in room ${roomInfo.roomName}`);
+                            //console.log(`Repairing rampart at (${rampartToRepair.pos.x}, ${rampartToRepair.pos.y}) with silo defender ${creepName} in room ${roomInfo.roomName}`);
                             continue;
                         }
 

@@ -113,7 +113,7 @@ export class RemoteWorker extends Operator {
 
         // While you're harvesting continue until you're full.
         if ( this.creep.memory.working == true) {
-            this.creep.say('harvest');
+            //this.creep.say('harvest');
             // Am I in range of the source?  If not, let's focus on that.
             //if (this.creep.pos.getRangeTo(this.source) > 6) {
             //    this.creep.say('closer');
@@ -128,7 +128,10 @@ export class RemoteWorker extends Operator {
                 this.creep.memory.action = 'harvest';
 
                 // Look for loose resources on the group near our source.
-                let resources = this.creep.room.lookForAt(LOOK_RESOURCES, this.creep.room.memory.sources[this.source.id].container.x, this.creep.room.memory.sources[this.source.id].container.y);
+                //let resources = this.creep.room.lookForAt(LOOK_RESOURCES, this.creep.room.memory.sources[this.source.id].container.x, this.creep.room.memory.sources[this.source.id].container.y);
+                let resources = this.source.pos.findInRange(FIND_DROPPED_RESOURCES, 5, {
+                    filter: (resource) => resource.resourceType == RESOURCE_ENERGY
+                });
 
                 // Look for the nearest container to the source.
                 let targets:EnergyStructure[] = [];
@@ -142,30 +145,24 @@ export class RemoteWorker extends Operator {
                     });
                 }
 
-                this.creep.say('' + targets.length);
+                if (targets.length == 0) {
+                    targets = this.source.pos.findInRange<EnergyStructure>(FIND_STRUCTURES, 5,{
+                        filter: (structure) => (
+                            structure.structureType == STRUCTURE_CONTAINER
+                        )
+                    });
+                }
+                console.log(JSON.stringify(resources));
 
-                if (targets.length > 0) {
+                if (targets.length > 0 && targets[0].store.getUsedCapacity(RESOURCE_ENERGY) > 50) {
 
-                    if (targets[0].store.getUsedCapacity(RESOURCE_ENERGY) > 50) {
-                        let target = targets[0];
-                        this.creep.memory.target = target.id;
-                        this.creep.memory.action = 'withdraw';
-                    }
+                    let target = targets[0];
+                    this.creep.memory.target = target.id;
+                    this.creep.memory.action = 'withdraw';
+
                 } else if (resources.length > 0) {
                     let target = resources[0];
 
-                    for (let t in resources) {
-                        let ttarget = resources[t];
-                        if (ttarget.resourceType == RESOURCE_ENERGY) {
-                            if (!target) {
-                                target = ttarget;
-                                continue;
-                            }
-                        }
-                        if (ttarget.amount > target.amount) {
-                            target = ttarget;
-                        }
-                    }
                     this.creep.memory.target = target.id;
                     this.creep.memory.action = 'pickup';
 
@@ -216,6 +213,7 @@ export class RemoteWorker extends Operator {
             if (this.creep.memory.target == null) {
 
                 let spawnConstruction = this.creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES);
+                //let spawnConstruction = false;
                 //let empty = MapHelper.getClosestEmpty(this.creep);
                 let empty = this.creep.pos.findClosestByRange(FIND_STRUCTURES, {
                     filter: function(object:SupplyStructure) {

@@ -20,7 +20,7 @@ declare global {
         room?: string;
         working?: boolean;
         squadId?: string;
-        waypoint?: number;
+        waypoint?: number | null;
         operation?: string;
         _travel?: any;
         boosted?: boolean;
@@ -213,6 +213,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
     if (Game.cpu.bucket < 3000) {
         console.log(`<span style="color:red">CPU Bucket Low: ${Game.cpu.bucket}</span>`);
         return;
+    } else {
+        console.log(`version 20261030.00`)
     }
 
   // Ensure per-room powerHarvest memory exists before operations run so PowerHarvestOperation

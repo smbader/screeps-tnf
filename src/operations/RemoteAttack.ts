@@ -34,8 +34,8 @@ class RemoteAttack extends Operation {
         { target: 'E33N3', source: 'E32N2', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         { target: 'E33N4', source: 'E32N4', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         { target: 'E31N4', source: 'E31N3', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
-        { target: "E31N2", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
-        { target: "E31N2", source: 'E31N3', forcespawn: true, total: 6, rangertype: this.jumboRangerBody, waypoints: [ ] },
+        //{ target: "E31N2", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
+        { target: "E33S0", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
     ];
 
     constructor() {
@@ -73,6 +73,9 @@ class RemoteAttack extends Operation {
                     continue;
                 }
                 // Spawn him.
+                if (!operationOperator.room.storage || operationOperator.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 50000) {
+                    continue;
+                }
                 let spawns = operationOperator.room.find(FIND_MY_SPAWNS);
                 if (spawns.length == 0) {
                     continue;

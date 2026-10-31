@@ -40,7 +40,7 @@ const ROOMS = [
   { name: "E29N4", config: E29N4, needsData: false },
   { name: "E33N2", config: E33N2, needsData: false },
   { name: "E33N3", config: E33N3, needsData: false },
-    { name: "E33N3", config: E33N4, needsData: false },
+  { name: "E33N4", config: E33N4, needsData: false },
   { name: "E33S1", config: E33S1, needsData: false }
 ];
 

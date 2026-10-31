@@ -5,7 +5,9 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from 'rollup-plugin-typescript2';
 import screeps from 'rollup-plugin-screeps';
-import screepsjson from './screeps.json' assert { type: 'json' };
+import { readFileSync } from 'fs';
+
+const screepsjson = JSON.parse(readFileSync(new URL('./screeps.json', import.meta.url), 'utf8'));
 
 let cfg;
 const dest = process.env.DEST;

@@ -3,9 +3,9 @@ export class E31N2 {
     public static getConfig() {
         return {
             "shard": "shard1",
-            "type": "defend",
+            "type": "owned",
             "roomtemplate": "ricane",
-            "roomanchor": {"x": 2, "y": 20},
+            "roomanchor": {"x": 10, "y": 20},
             "templaterotation": 0,
             "controllerLink": {"x": 9, "y": 15},
             "energysources": [

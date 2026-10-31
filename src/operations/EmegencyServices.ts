@@ -28,9 +28,9 @@ export class EmergencyServices extends Operation {
                 continue;
             }
 
-            if (room.energyAvailable < 500) {
+            if (room.energyAvailable < 1000) {
                 room.memory.starvedTime += 1;
-            } else if (room.energyAvailable >= 500) {
+            } else if (room.energyAvailable >= 1000) {
                 room.memory.starvedTime = 0;
             }
 
