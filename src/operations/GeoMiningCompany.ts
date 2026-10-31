@@ -14,7 +14,7 @@ export class GeoMiningCompany extends Operation {
         // Only consider owned, eligible rooms with spawns and sufficient controller level
         const myRooms = Object.values(Game.rooms).filter(room =>
             room.controller?.owner?.username === "ricane" &&
-            (!room.memory.config.shard || room.memory.config.shard === Game.shard.name) &&
+            (!room.memory.config?.shard || room.memory.config.shard === Game.shard.name) &&
             room.controller.level >= 7 &&
             room.find(FIND_MY_SPAWNS).length > 0
         );

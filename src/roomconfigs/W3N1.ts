@@ -1,6 +1,7 @@
+import type { RoomConfig } from "./RoomConfig";
 export class W3N1 {
 
-    public static getConfig() {
+    public static getConfig(): RoomConfig {
         return {
             "shard": "shard3",
             "type": "remote",

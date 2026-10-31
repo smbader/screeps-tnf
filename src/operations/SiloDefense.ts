@@ -3,7 +3,7 @@ import { Operation } from "../classes/operation";
 export class SiloDefense extends Operation {
 
     private roomsToDefend: any[] = [
-        {
+        /*{
             roomName: 'E32N2',
             source: { x: 20, y: 33 },
             harvestSpot: { x: 21, y: 33 },
@@ -22,7 +22,7 @@ export class SiloDefense extends Operation {
             spawnPosition: { x: 43, y: 46 },
             spawnDirection: TOP,
             rampartPositions: [{ x: 43, y: 44 },{ x: 43, y: 45 },{ x: 42, y: 46 },{ x: 41, y: 46 },{ x: 43, y: 46 }],
-        },
+        },*/
     ];
 
     public actions() {

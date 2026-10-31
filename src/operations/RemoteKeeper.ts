@@ -73,7 +73,7 @@ export class RemoteKeeper extends Operation {
                 for (let energysource of cfgTarget.energysources) {
 
                     name = 'RemoteHarvester_' + keeperRoom.target + '_' + idx;
-                    let rhoperator = new RemoteHarvester(name, sourceRoom, keeperRoom.target, energysource.id);
+                    let rhoperator = new RemoteHarvester(name, sourceRoom, keeperRoom.target, energysource.id as Id<any>);
                     this.operationOperators.push(rhoperator);
 
                     idx++;

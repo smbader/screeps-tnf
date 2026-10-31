@@ -86,9 +86,9 @@ export class RemoteFarming extends Operation {
                     let idx = 0;
                     for(var source of cfg.energysources) {
 
-                        for (let i = 1; i <= source.tinyfarmers; i++) {
+                        for (let i = 1; i <= (source.tinyfarmers || 0); i++) {
                             let name = 'TinyFarmer_' + expansionRoom.target + '_' + i + '_' + idx;
-                            let rhoperator = new TinyFarmer(name, sourceRoom, targetRoom.name, source.id);
+                            let rhoperator = new TinyFarmer(name, sourceRoom, targetRoom.name, source.id as Id<Source>);
                             this.operationOperators.push(rhoperator);
                         }
                         idx++;

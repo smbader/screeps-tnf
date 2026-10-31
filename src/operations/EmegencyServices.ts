@@ -38,7 +38,7 @@ export class EmergencyServices extends Operation {
             let idx = 0;
 
             for(var sourceid in cfgRoom.energysources) {
-                let parkingSpaces = cfgRoom.energysources[idx].parkingspots.length;
+                let parkingSpaces = (cfgRoom.energysources[idx].parkingspots || []).length;
 
                 // 3 for each parking spot, pull, travel, offloading
                 // there should be max limit because of the source regen

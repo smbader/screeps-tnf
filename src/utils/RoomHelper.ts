@@ -1,48 +1,12 @@
-import { E28S1 } from "../roomconfigs/E28S1";
-import { E31N1 } from "../roomconfigs/E31N1";
-import { E31N2 } from "../roomconfigs/E31N2";
-import { E31N3 } from "../roomconfigs/E31N3";
-import { E31N4 } from "../roomconfigs/E31N4";
-import { E32N3 } from "../roomconfigs/E32N3";
-import { E32N2 } from "../roomconfigs/E32N2";
-import { E32N4 } from "../roomconfigs/E32N4";
-import { E33N5 } from "../roomconfigs/E33N5";
-import { E37S1 } from "../roomconfigs/E37S1";
-import { E29N4 } from "../roomconfigs/E29N4";
-import { E25N11 } from "../roomconfigs/E25N11";
-import { E33N2 } from "../roomconfigs/E33N2";
-import { E33N3 } from "../roomconfigs/E33N3";
-import { E33S1 } from "../roomconfigs/E33S1";
-import { E33N4 } from "../roomconfigs/E33N4";
+import {
+  EnergySourceConfig,
+  ResolvedRoomConfig,
+  RoomConfig,
+  validateRoomConfig
+} from "../roomconfigs/RoomConfig";
+import { getRegisteredRoomConfig, ROOM_CONFIGS } from "../roomconfigs/registry";
 import { ricaneroom } from "./ricaneroom";
-
-// Interface for room config classes
-interface RoomConfigClass {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getConfig(): any;
-}
-
-// Room configuration array - defines all rooms and their setup requirements
-const ROOMS = [
-  // Rooms with full initialization (config + data + nextTrade)
-  { name: "E31N1", config: E31N1, needsData: true },
-  { name: "E31N2", config: E31N2, needsData: false },
-  { name: "E31N3", config: E31N3, needsData: true },
-  { name: "E28S1", config: E28S1, needsData: true },
-  { name: "E37S1", config: E37S1, needsData: true },
-  { name: "E33N5", config: E33N5, needsData: true },
-  { name: "E32N4", config: E32N4, needsData: true },
-  { name: "E25N11", config: E25N11, needsData: true },
-  // Rooms with config only
-  { name: "E32N3", config: E32N3, needsData: false },
-  { name: "E32N2", config: E32N2, needsData: true },
-  { name: "E31N4", config: E31N4, needsData: false },
-  { name: "E29N4", config: E29N4, needsData: false },
-  { name: "E33N2", config: E33N2, needsData: false },
-  { name: "E33N3", config: E33N3, needsData: false },
-  { name: "E33N4", config: E33N4, needsData: false },
-  { name: "E33S1", config: E33S1, needsData: false }
-];
+import { mapTemplateConfig } from "./RoomLayoutMapper";
 
 // Helper function to initialize room data with default values
 function initializeRoomData(room: Room): void {
@@ -73,106 +37,31 @@ function initializeRoomData(room: Room): void {
 }
 
 // Helper function to load room configuration
-function loadRoomConfig(roomName: string, configClass: RoomConfigClass, needsData: boolean): void {
+function loadRoomConfig(
+  roomName: string,
+  configEntry: (typeof ROOM_CONFIGS)[string]
+): void {
   if (Game.rooms[roomName]) {
-    const roomConfig = configClass.getConfig();
+    const roomConfig = getRegisteredRoomConfig(roomName);
+    if (!roomConfig) {
+      throw new Error(`Room config "${roomName}" is registered without a configuration`);
+    }
     const room = Game.rooms[roomName];
     room.memory.config = roomConfig;
 
-    if (needsData) {
+    if (configEntry.initializeData) {
       initializeRoomData(room);
     }
   }
 }
 
-// Utility: rotate a template-relative position (assumed in 0..11 space) around the 12x12 square
-function rotateAndTranslate(pos: { x: number; y: number }, anchor: { x: number; y: number }, rotation: number): { x: number; y: number } {
-  // Normalize rotation to 0-3 (multiples of 90 degrees clockwise)
-  const r = ((rotation % 4) + 4) % 4;
-  // Template grid size (0..11)
-  const N = 11;
-  let rx = 0;
-  let ry = 0;
-  switch (r) {
-    case 0:
-      rx = pos.x;
-      ry = pos.y;
-      break;
-    case 1:
-      rx = pos.y;
-      ry = N - pos.x;
-      break;
-    case 2:
-      rx = N - pos.x;
-      ry = N - pos.y;
-      break;
-    case 3:
-      rx = N - pos.y;
-      ry = pos.x;
-      break;
-  }
-  return { x: anchor.x + rx, y: anchor.y + ry };
-}
-
-// Map a template config (as returned by ricaneroom.getConfig()) into absolute room coordinates
-function mapTemplateConfig(templateConfig: any, anchor: { x: number; y: number }, rotation: number): any {
-  const mapped: any = {};
-
-  for (const key in templateConfig) {
-    const value = templateConfig[key];
-    if (value == null) continue;
-
-    // Single-position objects
-    if (value.x !== undefined && value.y !== undefined) {
-      mapped[key] = rotateAndTranslate(value, anchor, rotation);
-      continue;
-    }
-
-    // Arrays of positions
-    if (Array.isArray(value)) {
-      mapped[key] = value.map((entry: any) => {
-        if (entry.x !== undefined && entry.y !== undefined) {
-          return rotateAndTranslate(entry, anchor, rotation);
-        }
-        return entry;
-      });
-      continue;
-    }
-
-    // Nested objects (fields etc)
-    if (typeof value === 'object') {
-      mapped[key] = {};
-      for (const subkey in value) {
-        const subvalue = value[subkey];
-        if (subvalue == null) continue;
-        if (subvalue.x !== undefined && subvalue.y !== undefined) {
-          mapped[key][subkey] = rotateAndTranslate(subvalue, anchor, rotation);
-        } else if (Array.isArray(subvalue)) {
-          mapped[key][subkey] = subvalue.map((entry: any) => {
-            if (entry.x !== undefined && entry.y !== undefined) return rotateAndTranslate(entry, anchor, rotation);
-            return entry;
-          });
-        } else {
-          mapped[key][subkey] = subvalue;
-        }
-      }
-      continue;
-    }
-
-    // Fallback - copy as-is
-    mapped[key] = value;
-  }
-
-  return mapped;
-}
-
 // Build energysources array for rooms that don't have explicit energysources in their config
-function buildEnergySourcesForRoom(room: Room): any[] {
+function buildEnergySourcesForRoom(room: Room): EnergySourceConfig[] {
   const sources: Source[] = room.find(FIND_SOURCES);
-  const energysources: any[] = [];
+  const energysources: EnergySourceConfig[] = [];
 
   for (const s of sources) {
-    const entry: any = {
+    const entry: EnergySourceConfig = {
       id: s.id,
       pos: { x: s.pos.x, y: s.pos.y },
       haulers: 1
@@ -185,9 +74,9 @@ function buildEnergySourcesForRoom(room: Room): any[] {
       if (cont) {
         entry.parkingspots = [ { x: cont.x, y: cont.y } ];
         // If memory explicitly records a link position for this source, prefer that exact link first
-        if ((memSrc as any).linkpos) {
-          const lx = (memSrc as any).linkpos.x;
-          const ly = (memSrc as any).linkpos.y;
+        if (memSrc.linkpos) {
+          const lx = memSrc.linkpos.x;
+          const ly = memSrc.linkpos.y;
           const structs = room.lookForAt(LOOK_STRUCTURES, lx, ly) as Structure[];
           const exactLink = structs.find(sst => (sst.structureType === STRUCTURE_LINK)) as StructureLink | undefined;
           if (exactLink) {
@@ -230,69 +119,44 @@ function buildEnergySourcesForRoom(room: Room): any[] {
 }
 
 // Resolve a room's config: if the room uses a template, translate template coords into concrete positions
-function resolveTemplateConfig(room: Room): any {
+function resolveTemplateConfig(room: Room): RoomConfig | null {
   if (!room || !room.memory || !room.memory.config) return null;
-  const memcfg = room.memory.config;
+  const memcfg = validateRoomConfig(room.name, room.memory.config);
   if (!memcfg.roomtemplate) return memcfg;
 
-  const templateName = memcfg.roomtemplate;
   const anchor = memcfg.roomanchor || { x: 0, y: 0 };
   const rotation = memcfg.templaterotation || 0;
-
-  // Only 'ricane' template supported for now
-  let templateConfig: any = null;
-  if (templateName === 'ricane') {
-    templateConfig = ricaneroom.getConfig();
-  } else {
-    // Unknown template - return the raw memory config so at least template metadata is preserved
-    return memcfg;
-  }
-
-  const mapped = mapTemplateConfig(templateConfig, anchor, rotation);
-
-  // Merge - memory config keys should override template defaults
-  const merged: any = Object.assign({}, mapped, memcfg);
+  const mapped = mapTemplateConfig(ricaneroom.getConfig(), anchor, rotation);
+  const merged: RoomConfig = Object.assign({}, mapped, memcfg);
 
   // If energysources aren't provided by the memory config, build them from actual room sources
   if (!merged.energysources) {
     merged.energysources = buildEnergySourcesForRoom(room);
   }
 
-  // If spawns aren't present, ensure mapped spawns exist
-  if (!merged.spawns && mapped.spawns) merged.spawns = mapped.spawns;
-
-  // Ensure storagelink/controllerLink/fieldContainers/fieldLinks/chemist are present from template where missing
-  if (!merged.storagelink && mapped.storagelink) merged.storagelink = mapped.storagelink;
-  if (!merged.fieldContainers && mapped.fieldContainers) merged.fieldContainers = mapped.fieldContainers;
-  if (!merged.fieldLinks && mapped.fieldLinks) merged.fieldLinks = mapped.fieldLinks;
-  if (!merged.chemist && mapped.chemist) merged.chemist = mapped.chemist;
-
   // controllerLink isn't explicitly in template; if absent try using first fieldLink as controllerLink
   if (!merged.controllerLink && merged.fieldLinks && merged.fieldLinks.length > 0) {
     merged.controllerLink = merged.fieldLinks[0];
   }
 
-  // Also map field-specific entries (field0, field2 etc) from template if present and missing
-  for (const key in mapped) {
-    if (key.startsWith('field') && !merged[key]) {
-      merged[key] = mapped[key];
-    }
-  }
-
-  return merged;
+  return validateRoomConfig(room.name, merged);
 }
 
 export var RoomHelper = {
 
 
   loadRoomMemory: function() {
-    // First, load configuration for all explicitly configured rooms
-    for (const roomEntry of ROOMS) {
-      loadRoomConfig(roomEntry.name, roomEntry.config, roomEntry.needsData);
+    // Load only configs that were previously applied by the room loader.
+    for (const [roomName, roomEntry] of Object.entries(ROOM_CONFIGS)) {
+      if (roomEntry.loadOnVisibility) {
+        loadRoomConfig(roomName, roomEntry);
+      }
     }
 
-    // Then, initialize data for any other owned rooms not in the explicit list
-    const configuredRoomNames = new Set(ROOMS.map(r => r.name));
+    // Initialize data for owned rooms that are not configured for visibility loading.
+    const configuredRoomNames = new Set(
+      Object.keys(ROOM_CONFIGS).filter(roomName => ROOM_CONFIGS[roomName].loadOnVisibility)
+    );
     for (let roomid in Memory.rooms) {
       let room = Game.rooms[roomid];
       if (!room) {
@@ -301,17 +165,19 @@ export var RoomHelper = {
       if (room.controller?.owner?.username !== "ricane") {
         continue;
       }
-      if (!room.memory.config || room.memory.config.type !== "owned") {
+      if (!room.memory.config) {
         continue;
       }
+      const roomConfig = validateRoomConfig(roomid, room.memory.config);
+      if (roomConfig.type !== "owned") continue;
       // If config uses a template, resolve template positions into concrete coords
-      if (room.memory.config.roomtemplate) {
+      if (roomConfig.roomtemplate) {
         const resolved = resolveTemplateConfig(room);
         if (resolved) {
           room.memory.config = resolved;
         }
       }
-      // Only initialize if not already handled by the ROOMS array
+      // Avoid reinitializing data for rooms handled by the registry.
       if (!configuredRoomNames.has(roomid)) {
         initializeRoomData(room);
       }
@@ -321,11 +187,13 @@ export var RoomHelper = {
   },
 
   // Returns the resolved configuration for a room without modifying memory
-  getRoomValues: function(room: Room) {
-    if (!room) return null;
-
+  getRoomValues: function(room: Room): ResolvedRoomConfig {
     // Load runtime values from memory first so they are available
-    const memoryValues: any = {};
+    const memoryValues: ResolvedRoomConfig = {
+      energysources: [],
+      fieldContainers: [],
+      fieldLinks: []
+    };
     if (room.memory) {
       if (room.memory.nextTrade !== undefined) memoryValues.nextTrade = room.memory.nextTrade;
       if (room.memory.data !== undefined) memoryValues.data = room.memory.data;
@@ -336,16 +204,16 @@ export var RoomHelper = {
     }
 
     // Start with resolved config (handles templates)
-    let cfg = null;
+    let cfg: RoomConfig | null = null;
     if (room.memory && room.memory.config) {
       cfg = resolveTemplateConfig(room);
     }
 
     // Merge memory values first, then overlay the resolved config so config keys overwrite runtime memory values
-    let base: any = Object.assign({}, memoryValues, cfg || {});
+    const base: ResolvedRoomConfig = Object.assign({}, memoryValues, cfg || {});
 
     // Ensure energysources are present
-    if (!base.energysources) {
+    if (!cfg || cfg.energysources === undefined) {
       base.energysources = buildEnergySourcesForRoom(room);
     }
 
@@ -371,9 +239,6 @@ export var RoomHelper = {
     }
 
     // Field containers/links: fall back to empty arrays if missing
-    if (!base.fieldContainers) base.fieldContainers = base.fieldContainers || [];
-    if (!base.fieldLinks) base.fieldLinks = base.fieldLinks || [];
-
     // Chemist parking
     if (!base.chemist && cfg && cfg.chemist) base.chemist = cfg.chemist;
 
@@ -381,25 +246,18 @@ export var RoomHelper = {
   },
 
   // Backwards compatible alias: keep getRoomConfig but delegate to getRoomValues
-  getRoomConfig: function(room: Room) {
+  getRoomConfig: function(room: Room): ResolvedRoomConfig {
     return this.getRoomValues(room);
   },
 
   // Get config by room name, even if room is not visible
-  getRoomConfigByName: function(roomName: string) {
+  getRoomConfigByName: function(roomName: string): ResolvedRoomConfig | RoomConfig | null {
     // First, check if room is visible and has config
     const room = Game.rooms[roomName];
     if (room) {
       return this.getRoomConfig(room);
     }
 
-    // If not visible, look up in static configs
-    const roomEntry = ROOMS.find(r => r.name === roomName);
-    if (roomEntry) {
-      return roomEntry.config.getConfig();
-    }
-
-    // No config found
-    return null;
+    return getRegisteredRoomConfig(roomName);
   }
 };

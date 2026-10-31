@@ -178,20 +178,14 @@ export class ConstructionCompany extends Operation {
               // 20 extensions
               // 1 tower
               // 1 storage
-              let towers = cfgRoom.towers;
-              let containers = cfgRoom.field0.containers;
-              if (cfgRoom.field1) {
-                  containers = containers.concat(cfgRoom.field1.containers);
-              }
-              if (cfgRoom.field2) {
-                  containers = containers.concat(cfgRoom.field2.containers);
-              }
-              if (cfgRoom.field3) {
-                  containers = containers.concat(cfgRoom.field3.containers);
-              }
-              if (cfgRoom.field4) {
-                  containers = containers.concat(cfgRoom.field4.containers);
-              }
+              const towers = cfgRoom.towers || [];
+              let containers = cfgRoom.field0?.containers || [];
+              containers = containers.concat(
+                  cfgRoom.field1?.containers || [],
+                  cfgRoom.field2?.containers || [],
+                  cfgRoom.field3?.containers || [],
+                  cfgRoom.field4?.containers || []
+              );
 
               let storage = cfgRoom.storage;
 
@@ -222,7 +216,7 @@ export class ConstructionCompany extends Operation {
               }
 
               //console.log('CONSTRUCTION: Checking for Storage. [' + room.name + ']');
-              if (totalConstrctionSites < 2 &&
+              if (storage && totalConstrctionSites < 2 &&
                   room.lookForAt(LOOK_STRUCTURES,  storage.x, storage.y).length == 0 &&
                   room.lookForAt(LOOK_CONSTRUCTION_SITES,  storage.x, storage.y).length == 0) {
 
@@ -238,7 +232,7 @@ export class ConstructionCompany extends Operation {
               let storagelink = cfgRoom.storagelink;
 
               //console.log('CONSTRUCTION: Checking for Links. [' + room.name + ']');
-              if (totalConstrctionSites < 2 &&
+              if (storagelink && totalConstrctionSites < 2 &&
                   room.lookForAt(LOOK_STRUCTURES,  storagelink.x, storagelink.y).length == 0 &&
                   room.lookForAt(LOOK_CONSTRUCTION_SITES,  storagelink.x, storagelink.y).length == 0) {
 
@@ -247,7 +241,7 @@ export class ConstructionCompany extends Operation {
               }
 
               let controllerLink = cfgRoom.controllerLink;
-              if (totalConstrctionSites < 2 &&
+              if (controllerLink && totalConstrctionSites < 2 &&
                   room.lookForAt(LOOK_STRUCTURES,  controllerLink.x, controllerLink.y).length == 0 &&
                   room.lookForAt(LOOK_CONSTRUCTION_SITES,  controllerLink.x, controllerLink.y).length == 0) {
 

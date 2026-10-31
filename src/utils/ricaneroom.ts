@@ -1,7 +1,9 @@
 
+import type { RoomLayout } from "../roomconfigs/RoomConfig";
+
 export class ricaneroom {
 
-    public static getConfig() {
+    public static getConfig(): RoomLayout {
         return {
             "spawns": [
                 { "x":10, "y":0 },

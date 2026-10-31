@@ -1,7 +1,8 @@
+import type { RoomConfig } from "./RoomConfig";
 
 export class W15N4 {
 
-    public static getConfig() {
+    public static getConfig(): RoomConfig {
         return {
             "shard": "shard3",
             "type": "keeper-mineral",

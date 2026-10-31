@@ -1,7 +1,8 @@
+import type { RoomConfig } from "./RoomConfig";
 
 export class E33S1 {
 
-    public static getConfig() {
+    public static getConfig(): RoomConfig {
         return {
             "shard": "shard1",
             "type": "defend",

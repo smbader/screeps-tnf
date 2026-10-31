@@ -3,6 +3,7 @@ import { MapHelper } from "utils/MapHelper";
 import { OperationHelper } from "utils/OperationHelper";
 import { RoomHelper } from "utils/RoomHelper";
 import { TravelToOptions, Traveler } from "utils/Traveler";
+import type { RoomConfig, RoomRuntimeData } from "roomconfigs/RoomConfig";
 
 // Module load-time log (runs when the compiled bundle is loaded by Screeps)
 try { console.log(`screeps-tnf: main module loaded at ${new Date().toISOString()}`); } catch (e) {}
@@ -11,7 +12,6 @@ declare global {
     interface Memory {
         uuid: number;
         log: any;
-        marketPriceHistory: any;
         squadSiege?: any;
     }
 
@@ -45,7 +45,7 @@ declare global {
     interface RoomMemory {
         owner: string;
         cacheTime: number;
-        sources: { [sourceid: string]: { x: number, y: number, container: { id: string, x: number, y: number } } };
+        sources: { [sourceid: string]: { x: number, y: number, container: { id: string, x: number, y: number }, linkpos?: { x: number, y: number } } };
         avoid: number;
         srcPos: string;
         level: number;
@@ -57,7 +57,7 @@ declare global {
         starvedTime: number;
         occupied: boolean;
         boostRequests: { [boostType: string]: { flagName: string, requesterIds: string[] } };
-        config: any;
+        config?: RoomConfig;
         _cachedLinks?: {
             storage?: Id<StructureLink>;
             controller?: Id<StructureLink>;
@@ -79,16 +79,7 @@ declare global {
             scannedRooms?: { [roomName: string]: number };
         };
         _observedRoom?: string;
-        data: {
-            storagelinkcommand: string;
-            storagelinktarget: Id<StructureLink> | null;
-            terminal: { energy: number };
-            labs: {
-                reagents: { id: Id<StructureLab>, component: ResourceConstant }[];
-                products: { id: Id<StructureLab> }[];
-                boosts: { id: Id<StructureLab>, component: ResourceConstant }[];
-            };
-        };
+        data: RoomRuntimeData;
     }
 
     interface PowerBankMemory {

@@ -55,7 +55,8 @@ export class Upgrader extends Operator {
         }
 
         const cfg = RoomHelper.getRoomConfig(this.creep.room);
-        let controllerLinkpos = cfg.controllerLink;
+        const controllerLinkpos = cfg.controllerLink;
+        if (!controllerLinkpos) return;
         var controllerLinks = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
             filter: (structure) => {
                 return structure.pos.x === controllerLinkpos.x

@@ -1,7 +1,8 @@
+import type { RoomConfig } from "./RoomConfig";
 
 export class W13S6 {
 
-    public static getConfig() {
+    public static getConfig(): RoomConfig {
         return {
             "shard": "shard0",
             "type": "owned",

@@ -1,9 +1,11 @@
 import { Operation } from "../classes/operation";
 import { Operator } from "../classes/operator";
-import { Harvester } from "../operator/Harvester";
-import { Hauler } from "../operator/Hauler";
-import { Upgrader } from "../operator/Upgrader";
 import { Field } from "../operator/Field";
+import { Hauler } from "../operator/Hauler";
+import { Harvester } from "../operator/Harvester";
+import { Upgrader } from "../operator/Upgrader";
+import { getFieldConfig } from "../roomconfigs/RoomConfig";
+import { ENERGY_STORAGE_RESERVE } from "../utils/ResourceManagement";
 import { RoomHelper } from "../utils/RoomHelper";
 
 // Minimum free energy a recipient link must have to accept transfers from storage link
@@ -68,55 +70,40 @@ export class EnergyManagement extends Operation {
 
             let name = '';
 
-            name = 'Upgrader_' + room.name + '_' + 0;
-            operator = new Upgrader(name, room);
-            this.operationOperators.push(operator);
-
-            name = 'Upgrader_' + room.name + '_' + 1;
-            operator = new Upgrader(name, room);
-            this.operationOperators.push(operator);
-
-            name = 'Upgrader_' + room.name + '_' + 2;
-            operator = new Upgrader(name, room);
-            this.operationOperators.push(operator);
-
-            name = 'Upgrader_' + room.name + '_' + 3;
-            operator = new Upgrader(name, room);
-            this.operationOperators.push(operator);
+            for (let i = 0; i < 4; i++) {
+                name = 'Upgrader_' + room.name + '_' + i;
+                operator = new Upgrader(name, room);
+                this.operationOperators.push(operator);
+            }
 
             for (let i = 0; i < 6;  i++) {
-                if (cfg['field' + i]) {
-                    if (cfg['field' + i].levels.includes(room.controller.level)) {
-                        name = 'Field_' + room.name + '_' + i;
-                        operator = new Field(name, room, i);
-                        this.operationOperators.push(operator);
-                    }
+                const fieldConfig = getFieldConfig(cfg, i);
+                if (fieldConfig && fieldConfig.levels?.includes(room.controller.level)) {
+                    name = 'Field_' + room.name + '_' + i;
+                    operator = new Field(name, room, i);
+                    this.operationOperators.push(operator);
                 }
             }
 
-            let idx = 0;
-            for(var energysource in cfg.energysources) {
-
+            for (const [idx, energySource] of cfg.energysources.entries()) {
                 let harvesterName1 = 'Harvester_' + room.name + '_' + 0 + '_' + idx;
-                operator = new Harvester(harvesterName1, room, cfg.energysources[idx].id, room);
+                operator = new Harvester(harvesterName1, room, energySource.id as Id<Source>, room);
                 this.operationOperators.push(operator);
 
-                if (cfg.energysources[idx].linkpos && room.lookForAt(LOOK_STRUCTURES, cfg.energysources[idx].linkpos.x, cfg.energysources[idx].linkpos.y).length > 0) {
+                if (energySource.linkpos && room.lookForAt(LOOK_STRUCTURES, energySource.linkpos.x, energySource.linkpos.y).length > 0) {
                     // Using link to deliver energy. Don't need haulers anymore for this energy source.
                     //console.log('[' + room.name + '] Haulers not needed: ' + idx);
                 } else {
                     if (room.storage != null) {
-                        for (let i = 0; i < cfg.energysources[idx].haulers;  i++) {
+                        for (let i = 0; i < (energySource.haulers || 0);  i++) {
                             let haulerName = 'Hauler_' + room.name + '_' + i + '_' + idx;
 
-                            operator = new Hauler(haulerName, room, cfg.energysources[idx].id, false);
+                            operator = new Hauler(haulerName, room, energySource.id, false);
                             this.operationOperators.push(operator);
                         }
 
                     }
                 }
-
-                idx++;
             }
 
             if (room.controller.level == 4 && room.storage && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000) {
@@ -171,7 +158,7 @@ export class EnergyManagement extends Operation {
                             controllerLevel = spawn.room.controller.level;
                         }
                         if (controllerLevel <=3) { continue; }
-                        if (controllerLevel > 8 && spawn.room.storage && spawn.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 800000) { continue; }
+                        if (controllerLevel > 8 && spawn.room.storage && spawn.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > ENERGY_STORAGE_RESERVE) { continue; }
                         if (holding[operationOperator.room.name]) { continue; }
                         if (!spawn.spawning) {
                             if (operationOperator instanceof Harvester) {
@@ -232,8 +219,7 @@ export class EnergyManagement extends Operation {
                 if (operationOperator instanceof Field) {
 
                     const cfgField = RoomHelper.getRoomConfig(operationOperator.room);
-                    const fieldKey = 'field' + operationOperator.memory.fieldindex;
-                    const fieldCfg = cfgField && cfgField[fieldKey];
+                    const fieldCfg = getFieldConfig(cfgField, operationOperator.memory.fieldindex ?? -1);
 
                     if (fieldCfg && fieldCfg.levels && operationOperator.room.controller && fieldCfg.levels.includes(operationOperator.room.controller.level)) {
 
@@ -254,7 +240,7 @@ export class EnergyManagement extends Operation {
                             }
 
                             console.log(`    Spawning: ` +  operationOperator.name + ` Spawn Response: ` + spawn.spawnCreep(operatorParts, operationOperator.name,
-                                { directions: cfgField['field' + operationOperator.memory.fieldindex].spawndirection }));
+                                { directions: fieldCfg.spawndirection }));
 
                         } else if (operationOperator.room.controller != null && operationOperator.room.controller.level <= 7 && spawns.length > 0) {
 
@@ -295,13 +281,12 @@ export class EnergyManagement extends Operation {
             try {
 
                 //console.log('[' + room.name + '] Energy Network ');
-                let storagelinkpos = cfg.storagelink;
+                const storagelinkpos = cfg.storagelink;
 
-                let idx = 0;
                 var sourceLinks:StructureLink[] = [];
 
-                for(var energysource in cfg.energysources) {
-                    let sourcelinkpos = cfg.energysources[idx].linkpos;
+                for (const energysource of cfg.energysources) {
+                    const sourcelinkpos = energysource.linkpos;
                     if (sourcelinkpos) {
                         sourceLinks = [...sourceLinks, ...(room.find<StructureLink>(FIND_STRUCTURES, {
                             filter: (structure) => {
@@ -311,7 +296,6 @@ export class EnergyManagement extends Operation {
                             }
                         }))];
                     }
-                    idx++;
                 }
 
                 if (!storagelinkpos) {

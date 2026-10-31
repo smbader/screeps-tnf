@@ -1,5 +1,6 @@
 import { Operator } from "../classes/operator";
 import { RoomHelper } from "../utils/RoomHelper";
+import { getFieldConfig } from "../roomconfigs/RoomConfig";
 
 type FieldStructure = StructureSpawn | StructureExtension | StructureStorage | StructureContainer | StructureLink | StructureTerminal | StructureTower;
 
@@ -23,7 +24,7 @@ export class Field extends Operator {
         name?: string;
         fieldindex?: number;
         spawn?: { x: number, y: number };
-        spawndirection: DirectionConstant;
+        spawndirection?: DirectionConstant[];
         sources?: [{ x: number, y: number }];
         containers?: [{ x: number, y: number }];
         containeridx: number;
@@ -35,7 +36,7 @@ export class Field extends Operator {
         super(name, room);
         const cfg = RoomHelper.getRoomConfig(room);
         this.memory = {
-            spawndirection: cfg['field' + fieldIndex]?.spawndirection,
+            spawndirection: getFieldConfig(cfg, fieldIndex)?.spawndirection,
             containeridx: 0,
         };
         this.memory.name = name;
@@ -58,7 +59,8 @@ export class Field extends Operator {
         // Cache memory and config references for reuse
         const mem = creep.memory;
         const configAll = RoomHelper.getRoomConfig(this.room);
-        const config = configAll['field' + this.memory.fieldindex];
+        const config = getFieldConfig(configAll, this.memory.fieldindex ?? -1);
+        if (!config || !config.parkingspot) return;
         const parkPos = new RoomPosition(config.parkingspot.x, config.parkingspot.y, this.room.name);
 
         // State management - avoid deep comparisons
@@ -67,7 +69,7 @@ export class Field extends Operator {
 
         // --- HARVESTING/RETRIEVAL (working === true) ---
         if (mem.working == null || mem.working === true) {
-            const sources = config.sources;
+            const sources = config.sources || [];
 
             const potentialTargets: FieldStructure[] = [];
             for (const src of sources) {
@@ -130,7 +132,7 @@ export class Field extends Operator {
         // --- DELIVERY (working === false) ---
         else {
 
-            const containers = config.containers;
+            const containers = config.containers || [];
             // Batch all structures once for efficient filtering
             const structures = this.room.find<FieldStructure>(FIND_STRUCTURES, {
                 filter: (structure) => {

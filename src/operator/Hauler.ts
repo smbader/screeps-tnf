@@ -331,24 +331,25 @@ export class Hauler extends Operator {
             }
 
             const roomCfg2 = RoomHelper.getRoomConfig(this.room);
-            let storagelinkpos = roomCfg2.storagelink;
-            let controllerLinkpos = roomCfg2.controllerLink;
+            const storagelinkpos = roomCfg2.storagelink;
+            const controllerLinkpos = roomCfg2.controllerLink;
 
-            var storagelink = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
-                filter: (structure) => {
-                    return structure.pos.x === storagelinkpos.x
-                        && structure.pos.y === storagelinkpos.y
-                        && structure.structureType == STRUCTURE_LINK;
-                }
-            });
-
-            var controllerLink = this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
-                filter: (structure) => {
-                    return structure.pos.x === controllerLinkpos.x
-                        && structure.pos.y === controllerLinkpos.y
-                        && structure.structureType == STRUCTURE_LINK;
-                }
-            });
+            const storagelink = storagelinkpos
+                ? this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
+                    filter: structure =>
+                        structure.pos.x === storagelinkpos.x &&
+                        structure.pos.y === storagelinkpos.y &&
+                        structure.structureType === STRUCTURE_LINK
+                })
+                : [];
+            const controllerLink = controllerLinkpos
+                ? this.creep.room.find<StructureLink>(FIND_STRUCTURES, {
+                    filter: structure =>
+                        structure.pos.x === controllerLinkpos.x &&
+                        structure.pos.y === controllerLinkpos.y &&
+                        structure.structureType === STRUCTURE_LINK
+                })
+                : [];
 
             const empty = MapHelper.getClosestEmpty(this.creep);
 

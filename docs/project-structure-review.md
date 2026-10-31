@@ -16,7 +16,9 @@ Reviewed the main tick loop, operation/operator base classes, operation registra
 
 ### 1. Make room configuration typed, validated, and single-source
 
-`RoomHelper` has a manually maintained `ROOMS` array, while room configuration modules live separately. The loader currently uses `any` for both `getConfig()` and its template mapper. This makes configuration changes easy to get wrong and pushes errors into runtime behavior.
+**Status: Implemented.** All room config modules now use the shared schema in [`RoomConfig.ts`](../src/roomconfigs/RoomConfig.ts), and [`registry.ts`](../src/roomconfigs/registry.ts) is the keyed source for lookup and room-loader policy. Configs are runtime-validated, and template mapping transforms only declared positional fields. Unit tests cover every registered config, invalid values, duplicate names, and coordinate mapping.
+
+Before this change, `RoomHelper` maintained a separate `ROOMS` array and used `any` for config providers and template mapping. That made configuration changes easy to get wrong and pushed errors into runtime behavior.
 
 - Define a shared `RoomConfig` type for shard, room type, template, anchor/rotation, energy sources, spawn positions, and optional room features.
 - Type each room configuration against that schema and replace `getConfig(): any`.
@@ -24,7 +26,7 @@ Reviewed the main tick loop, operation/operator base classes, operation registra
 - Validate unique room names and required fields at startup or in a small test. Fail visibly on duplicate or invalid entries rather than silently overriding configuration.
 - Keep template-coordinate transformation limited to known coordinate-bearing fields instead of recursively treating arbitrary `{x, y}` objects as positions.
 
-**Concrete issue found:** `ROOMS` registers `E33N3` twice; the second entry points to `E33N4`'s config. That likely means `E33N4` is not loaded under its own name and `E33N3` is overwritten. Confirm the intended mapping when correcting the registry.
+**Issue resolved:** the keyed registry contains distinct `E33N3` and `E33N4` entries, preventing the earlier duplicate registration.
 
 References: [`RoomHelper.ts`](../src/utils/RoomHelper.ts#L19), [`E31N2.ts`](../src/roomconfigs/E31N2.ts#L1).
 
