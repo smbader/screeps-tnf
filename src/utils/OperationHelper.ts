@@ -33,7 +33,7 @@ const OPERATION_CLASSES: Type_Operation_Classes = {
     energymanagement: EnergyManagement,         // 2
     emergencyservices: EmergencyServices,       // 1
     geominingcompany: GeoMiningCompany,         // 9
-    //depositfarmer: DepositFarmer,             // 10
+    depositfarmer: DepositFarmer,             // 10
     //remotekeeper: RemoteKeeper,                 // 11
     //remoteconstruction: RemoteDeconstruction,
     labprocesses: LabProcesses,

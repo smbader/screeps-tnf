@@ -4,6 +4,7 @@ import { OperationHelper } from "utils/OperationHelper";
 import { RoomHelper } from "utils/RoomHelper";
 import { TravelToOptions, Traveler } from "utils/Traveler";
 import type { RoomConfig, RoomRuntimeData } from "roomconfigs/RoomConfig";
+import type { DepositFarmerMemory, DepositMinerCreepMemory } from "operations/DepositFarmerTypes";
 
 // Module load-time log (runs when the compiled bundle is loaded by Screeps)
 try { console.log(`screeps-tnf: main module loaded at ${new Date().toISOString()}`); } catch (e) {}
@@ -13,6 +14,7 @@ declare global {
         uuid: number;
         log: any;
         squadSiege?: any;
+        depositFarmer?: DepositFarmerMemory;
     }
 
     interface CreepMemory {
@@ -32,6 +34,10 @@ declare global {
         phase?: string | null;
         targetRoom?: string | null;
         targetFighter?: string;
+        depositId?: Id<Deposit>;
+        depositPos?: { x: number; y: number };
+        depositType?: DepositConstant;
+        depositState?: DepositMinerCreepMemory["depositState"];
     }
 
     interface Room {

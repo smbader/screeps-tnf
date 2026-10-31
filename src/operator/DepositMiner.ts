@@ -1,114 +1,141 @@
-import { extend } from "lodash";
+import { DEPOSIT_FARMER_POLICY } from "../operations/DepositFarmerTypes";
+import type { DepositSightingMemory } from "../operations/DepositFarmerTypes";
 import { Operator } from "../classes/operator";
-import {MapHelper} from "../utils/MapHelper";
 
-interface DepositMinerMemory extends CreepMemory {
-    targetRoom: string;
-    target?: Id<any> | null;
-}
-
-export class DepositMinerCreep extends Creep {
-    memory!: DepositMinerMemory;
-
-    constructor(creepid: any, targetRoom: string) {
-        super(creepid);
-
-        const baseMemory: CreepMemory = super.memory;
-        this.memory.room = baseMemory.room;
-        this.memory.targetRoom = targetRoom;
-    }
-}
-
-// An operator is a screep who performs an operation.
+const DEPOSIT_RESOURCE_TYPES: DepositConstant[] = [RESOURCE_MIST, RESOURCE_BIOMASS, RESOURCE_METAL, RESOURCE_SILICON];
 export class DepositMiner extends Operator {
-    creep: DepositMinerCreep | null;
-    targetroom: string;
+  private readonly sighting: DepositSightingMemory;
+  private readonly creep: Creep | null;
 
-    constructor(name: string, room: Room, targetRoom: string) {
-        super(name, room);
+  public constructor(name: string, homeRoom: Room, sighting: DepositSightingMemory) {
+    super(name, homeRoom);
+    this.sighting = sighting;
+    this.creep = Game.creeps[name] || null;
+  }
 
-        if (Game.creeps[this.name]) {
-            this.creep = new DepositMinerCreep(Game.creeps[this.name].id, targetRoom);
-        } else {
-            this.creep = null;
-        }
-        this.room = room;
-        this.targetroom = targetRoom;
+  public actions(): void {
+    const creep = this.creep;
+    if (!creep) return;
+
+    const homeDistance = Game.map.getRoomLinearDistance(creep.pos.roomName, this.room.name, false);
+    const returnTime = homeDistance * 50 + DEPOSIT_FARMER_POLICY.returnSafetyTicks;
+    const homeToTargetDistance = Game.map.getRoomLinearDistance(this.room.name, this.sighting.roomName, false);
+    const tripTime = homeToTargetDistance * 100 + DEPOSIT_FARMER_POLICY.returnSafetyTicks;
+
+    if (
+      creep.memory.depositState !== "retiring" &&
+      (creep.store.getFreeCapacity() === 0 || (creep.ticksToLive || 0) <= returnTime)
+    ) {
+      creep.memory.depositState = "returning";
     }
 
-    actions() {
-
-        // Creep may not exist yet.
-        if (!this.creep) {
-            return;
-        }
-
-        let returnHome = false;
-
-        // If we're full, return home.
-        if (this.creep.store.getFreeCapacity() == 0) {
-            //console.log('[' + this.targetroom + '] Mining cart is full');
-            returnHome = true;
-        }
-
-
-        // Life is getting short.
-        if (this.creep.ticksToLive != undefined && this.creep.ticksToLive < 250) {
-            //console.log('[' + this.targetroom + '] Im about to die.');
-            if (this.creep.store.getUsedCapacity() == 0) {
-                // I'm empty and about to die.
-                this.creep.suicide();
-                return;
-            }
-            returnHome = true;
-        }
-
-        if (!returnHome) {
-
-            if (this.targetroom != this.creep.pos.roomName) {
-                this.creep.say('🚗');
-                this.creep.travelTo(new RoomPosition(25, 25, this.targetroom));
-                return;
-            }
-
-            // If we're in the room, look for a power node.
-            let targetRoom = Game.rooms[this.targetroom];
-            let targets = targetRoom.find(FIND_DEPOSITS);
-
-            if (targets.length > 0) {
-                let target = targets[0];
-
-                if (target && !returnHome) {
-                    let result = this.creep.harvest(target);
-                    if (result == ERR_NOT_IN_RANGE) {
-                        this.creep.travelTo(target.pos);
-                        return;
-                    }
-                }
-            } else {
-                // If the deposit is gone
-                //console.log('[' + this.targetroom + '] Deposit is gone.');
-                returnHome = true;
-            }
-        }
-
-        if (returnHome) {
-            let storage = this.room.storage;
-            if (storage) {
-                let actionresult;
-                for(const resourceType in this.creep.store) {
-                    actionresult = this.creep.transfer(storage, <"energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence">resourceType);
-                    break;
-                }
-                if (actionresult == ERR_NOT_IN_RANGE) {
-                    this.creep.travelTo(storage.pos);
-                    return;
-                }
-
-            }
-        }
-
+    if (creep.memory.depositState === "retiring") {
+      this.retireWhenEmpty(creep, tripTime);
+      return;
     }
 
+    if (creep.memory.depositState === "returning" || creep.memory.depositState === "unloading") {
+      this.returnAndUnload(creep, tripTime);
+      return;
+    }
 
+    if (creep.pos.roomName !== this.sighting.roomName) {
+      creep.memory.depositState = "travelling";
+      this.travel(creep, new RoomPosition(25, 25, this.sighting.roomName), 16);
+      return;
+    }
+
+    const deposit = Game.getObjectById(this.sighting.id);
+    if (!deposit || deposit.ticksToDecay <= homeDistance * 50 + DEPOSIT_FARMER_POLICY.returnSafetyTicks) {
+      creep.memory.depositState = creep.store.getUsedCapacity() > 0 ? "returning" : "retiring";
+      this.retireWhenEmpty(creep, tripTime);
+      return;
+    }
+
+    creep.memory.depositState = "harvesting";
+    const result = creep.harvest(deposit);
+    if (result === ERR_NOT_IN_RANGE) {
+      this.travel(creep, deposit.pos, 1);
+    } else if (result !== OK && result !== ERR_TIRED) {
+      creep.memory.depositState = creep.store.getUsedCapacity() > 0 ? "returning" : "retiring";
+      console.log(`[DepositFarmer] ${creep.name} cannot harvest ${this.sighting.id}: ${result}`);
+    }
+  }
+
+  private returnAndUnload(creep: Creep, tripTime: number): void {
+    if (creep.pos.roomName !== this.room.name) {
+      this.travel(creep, new RoomPosition(25, 25, this.room.name), 16);
+      return;
+    }
+
+    const resources = DEPOSIT_RESOURCE_TYPES.filter(resourceType => creep.store.getUsedCapacity(resourceType) > 0);
+    if (resources.length === 0) {
+      this.retireWhenEmpty(creep, tripTime);
+      return;
+    }
+
+    const resource = resources[0];
+    const sinks = [this.room.storage, this.room.terminal].filter(
+      (structure): structure is StructureStorage | StructureTerminal =>
+        structure !== undefined && (structure.store.getFreeCapacity(resource) || 0) > 0
+    );
+
+    for (const sink of sinks) {
+      const result = creep.transfer(sink, resource);
+      if (result === OK) {
+        if (creep.memory.depositState !== "retiring") {
+          creep.memory.depositState = "unloading";
+        }
+        return;
+      }
+      if (result === ERR_NOT_IN_RANGE) {
+        this.travel(creep, sink.pos, 1);
+        return;
+      }
+      if (result !== ERR_FULL && result !== ERR_NOT_ENOUGH_RESOURCES) {
+        console.log(`[DepositFarmer] ${creep.name} cannot unload ${resource}: ${result}`);
+        return;
+      }
+    }
+
+    if (Game.time % 100 === 0) {
+      console.log(`[DepositFarmer] ${creep.name} has no available storage/terminal capacity for ${resource}`);
+    }
+  }
+
+  private retireWhenEmpty(creep: Creep, tripTime: number): void {
+    const retiring = creep.memory.depositState === "retiring";
+    const sightingAge = Math.max(0, Game.time - this.sighting.lastSeen);
+    const remainingDepositLifetime = this.sighting.ticksToDecay - sightingAge;
+    if (creep.store.getUsedCapacity() > 0) {
+      if (!retiring) creep.memory.depositState = "returning";
+      this.returnAndUnload(creep, tripTime);
+      return;
+    }
+
+    if (creep.pos.roomName !== this.room.name) {
+      if (!retiring) creep.memory.depositState = "returning";
+      this.travel(creep, new RoomPosition(25, 25, this.room.name), 16);
+      return;
+    }
+
+    if ((creep.ticksToLive || 0) <= tripTime || remainingDepositLifetime <= tripTime || retiring) {
+      creep.suicide();
+      return;
+    }
+
+    creep.memory.depositState = "travelling";
+  }
+
+  private travel(creep: Creep, destination: RoomPosition, maxRooms: number): void {
+    const result = creep.travelTo(destination, { maxRooms });
+    if (
+      result !== OK &&
+      result !== ERR_TIRED &&
+      (result === ERR_NO_PATH || result === ERR_INVALID_TARGET || result === ERR_NOT_FOUND) &&
+      Game.time % DEPOSIT_FARMER_POLICY.scanFailureLogInterval === 0
+    ) {
+      console.log(`[DepositFarmer] ${creep.name} cannot travel to ${destination.roomName}: ${result}`);
+    }
+  }
 }
