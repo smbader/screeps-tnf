@@ -14,7 +14,7 @@ import RemoteAttack from "../operations/RemoteAttack";
 import { RemoteKeeper } from "../operations/RemoteKeeper";
 import { PowerHarvestOperation } from "../operations/PowerHarvestOperation";
 import { LabProcesses } from "../operations/LabProcesses";
-import { SquadSiegeOperation } from "../operations/SquadSiegeOperation";
+import { SiegeOperation } from "../operations/SiegeOperation";
 import { ControllerAttacker } from "../operations/ControllerAttacker";
 import { SiloDefense } from "../operations/SiloDefense";
 
@@ -23,6 +23,7 @@ type Type_Operation_Classes = {
 }
 
 const OPERATION_CLASSES: Type_Operation_Classes = {
+    siege: SiegeOperation,                      // runs before depositfarmer so it claims observers first
     market: Market,                             // 5
     remoteattack: RemoteAttack,
     //powerharvestoperation: PowerHarvestOperation,                 // 6
@@ -45,32 +46,6 @@ export var OperationHelper = {
     getOperations: function(): Operation[] {
         // gather flag data, instantiate operations
         let operationList: Operation[] = [];
-
-        // Custom military attack
-        if (Game.shard.name == 'shard3') {
-            const waypoints = [
-                {x: 36, y: 39, room: 'W13N1'},
-                {x: 45, y: 10, room: 'W10N1'},
-                {x: 35, y: 34, room: 'W10N3'},
-                // more...
-            ];
-
-            //if (Game.time < (72077432 + 1400)  ) {
-            //    let siege = new SquadSiegeOperation("W1N1", "W9N3", waypoints);
-            //    operationList.push(siege);
-            //}
-
-
-            //let siege2 = new SquadSiegeOperation("W4N1", "W13N1", waypoints);
-            //operationList.push(siege2);
-
-
-            //let controllerAttacker = new ControllerAttacker();
-            //controllerAttacker.action('W4N1','W1N1');
-        }
-
-        //let siege = new SquadSiegeOperation("E31N2", "E31N1", []);
-        //operationList.push(siege);
 
         // loop through operations defined by library
         for (let typeName in OPERATION_CLASSES) {

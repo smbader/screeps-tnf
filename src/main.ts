@@ -4,6 +4,7 @@ import { OperationHelper } from "utils/OperationHelper";
 import { RoomHelper } from "utils/RoomHelper";
 import { TravelToOptions, Traveler } from "utils/Traveler";
 import type { RoomConfig, RoomRuntimeData } from "roomconfigs/RoomConfig";
+import type { SiegeRootMemory } from "operations/SiegeTypes";
 import type { DepositFarmerMemory, DepositMinerCreepMemory } from "operations/DepositFarmerTypes";
 
 // Module load-time log (runs when the compiled bundle is loaded by Screeps)
@@ -13,7 +14,7 @@ declare global {
     interface Memory {
         uuid: number;
         log: any;
-        squadSiege?: any;
+        sieges?: SiegeRootMemory;
         depositFarmer?: DepositFarmerMemory;
     }
 
@@ -21,7 +22,8 @@ declare global {
         role: string;
         room?: string;
         working?: boolean;
-        squadId?: string;
+        siegeId?: string;
+        slot?: "A1" | "A2" | "S1" | "S2";
         waypoint?: number | null;
         operation?: string;
         _travel?: any;

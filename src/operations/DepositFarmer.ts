@@ -4,6 +4,7 @@ import { DEPOSIT_FARMER_POLICY } from "./DepositFarmerTypes";
 import { DepositMiner } from "../operator/DepositMiner";
 import { Operation } from "../classes/operation";
 import { RoomHelper } from "../utils/RoomHelper";
+import { claimObserver } from "../utils/ObserverClaims";
 
 const DEPOSIT_FARMER_MEMORY_VERSION = 2;
 
@@ -179,7 +180,7 @@ export class DepositFarmer extends Operation {
           return leftScanned - rightScanned || left.localeCompare(right);
         })[0];
       if (!candidate) continue;
-
+      if (!claimObserver(home.observer.id, Game.time)) continue;
       const result = home.observer.observeRoom(candidate);
       homeMemory.lastScanTick = Game.time;
       if (result === OK) {

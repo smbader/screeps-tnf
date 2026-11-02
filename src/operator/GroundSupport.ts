@@ -2,6 +2,7 @@ import { Operator } from "../classes/operator";
 import { RoomHelper } from "../utils/RoomHelper";
 
 const DEPOSIT_MARKET_RESOURCES: DepositConstant[] = ["mist", "biomass", "metal", "silicon"];
+const BOOST_LAB_STORAGE_ENERGY_FLOOR = 30000;
 
 export class GroundSupportCreep extends Creep {
     memory!: CreepMemory & {
@@ -53,6 +54,7 @@ export class GroundSupport extends Operator {
                     case 'FILL_POWER_SPAWW_ENERGY': this.fillPowerSpawnEnergyAction(); break;
                     case 'FILL_POWER_SPAWN_POWER': this.fillPowerSpawnPowerAction(); break;
                     case 'FILL_TERMINAL_RESOURCES_FROM_STORAGE': this.fillTerminalResourcesFromStorageAction(); break;
+                    case 'FILL_BOOST_LABS': this.fillBoostLabsAction(); break;
                     case 'OFFLOAD_DEPOSIT_RESOURCES_TO_TERMINAL': this.offloadDepositResourcesToTerminalAction(); break;
 
                     default:
@@ -160,7 +162,11 @@ export class GroundSupport extends Operator {
             return;
         }
 
-        // Fill labs
+        // 10. Fill boost labs reserved by a siege
+        if (this.getBoostLabNeed()) {
+            this.creep.memory.task = 'FILL_BOOST_LABS';
+            return;
+        }
 
         // 11. Fill power spawns
         if (this.powerSpawnEnergyCheck()) {
@@ -1101,6 +1107,73 @@ export class GroundSupport extends Operator {
 
 
 
+
+    private getBoostLabNeed(): { lab: StructureLab; resource: ResourceConstant; amount: number } | null {
+        const storage = this.room.storage;
+        const boosts = this.room.memory.data?.labs?.boosts || [];
+        if (!storage) return null;
+
+        for (const entry of boosts) {
+            const lab = Game.getObjectById(entry.id);
+            if (!lab) continue;
+            if (lab.mineralType && lab.mineralType !== entry.component) continue;
+
+            const mineralDeficit = (lab.store.getCapacity(entry.component) || 0) - (lab.store.getUsedCapacity(entry.component) || 0);
+            const mineralStock =
+                (storage.store.getUsedCapacity(entry.component) || 0) +
+                (this.room.terminal?.store.getUsedCapacity(entry.component) || 0);
+            if (mineralDeficit > 0 && mineralStock > 0) {
+                return { lab, resource: entry.component, amount: Math.min(mineralDeficit, mineralStock) };
+            }
+
+            const energyDeficit = (lab.store.getCapacity(RESOURCE_ENERGY) || 0) - (lab.store.getUsedCapacity(RESOURCE_ENERGY) || 0);
+            if (energyDeficit > 0 && (storage.store.getUsedCapacity(RESOURCE_ENERGY) || 0) > BOOST_LAB_STORAGE_ENERGY_FLOOR) {
+                return { lab, resource: RESOURCE_ENERGY, amount: energyDeficit };
+            }
+        }
+        return null;
+    }
+
+    private fillBoostLabsAction(): void {
+        const creep = this.creep;
+        const storage = this.room.storage;
+        if (!creep || !storage) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        const need = this.getBoostLabNeed();
+        const carried = (Object.keys(creep.store) as ResourceConstant[])[0];
+
+        if (carried && (!need || carried !== need.resource)) {
+            const result = creep.transfer(storage, carried);
+            if (result === ERR_NOT_IN_RANGE) creep.moveTo(storage, { visualizePathStyle: { stroke: '#00ff00' } });
+            return;
+        }
+
+        if (!need) {
+            this.clearCreepTask(creep);
+            return;
+        }
+
+        if (carried) {
+            const result = creep.transfer(need.lab, need.resource);
+            if (result === ERR_NOT_IN_RANGE) creep.moveTo(need.lab, { visualizePathStyle: { stroke: '#00ff00' } });
+            else if (result !== OK) this.clearCreepTask(creep);
+            return;
+        }
+
+        const source =
+            (storage.store.getUsedCapacity(need.resource) || 0) > 0 ? storage : this.room.terminal;
+        if (!source) {
+            this.clearCreepTask(creep);
+            return;
+        }
+        const amount = Math.min(need.amount, creep.store.getFreeCapacity() || 0, source.store.getUsedCapacity(need.resource) || 0);
+        const result = creep.withdraw(source, need.resource, amount);
+        if (result === ERR_NOT_IN_RANGE) creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
+        else if (result !== OK) this.clearCreepTask(creep);
+    }
 
     private clearCreepTask(creep: GroundSupportCreep | null): void {
         if (this.creep) {
