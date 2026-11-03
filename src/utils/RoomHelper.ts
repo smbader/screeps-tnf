@@ -1,9 +1,4 @@
-import {
-  EnergySourceConfig,
-  ResolvedRoomConfig,
-  RoomConfig,
-  validateRoomConfig
-} from "../roomconfigs/RoomConfig";
+import { EnergySourceConfig, ResolvedRoomConfig, RoomConfig, validateRoomConfig } from "../roomconfigs/RoomConfig";
 import { getRegisteredRoomConfig, ROOM_CONFIGS } from "../roomconfigs/registry";
 import { ricaneroom } from "./ricaneroom";
 import { mapTemplateConfig } from "./RoomLayoutMapper";
@@ -37,10 +32,7 @@ function initializeRoomData(room: Room): void {
 }
 
 // Helper function to load room configuration
-function loadRoomConfig(
-  roomName: string,
-  configEntry: (typeof ROOM_CONFIGS)[string]
-): void {
+function loadRoomConfig(roomName: string, configEntry: typeof ROOM_CONFIGS[string]): void {
   if (Game.rooms[roomName]) {
     const roomConfig = getRegisteredRoomConfig(roomName);
     if (!roomConfig) {
@@ -72,13 +64,13 @@ function buildEnergySourcesForRoom(room: Room): EnergySourceConfig[] {
       const memSrc = room.memory.sources[s.id];
       const cont = memSrc.container;
       if (cont) {
-        entry.parkingspots = [ { x: cont.x, y: cont.y } ];
+        entry.parkingspots = [{ x: cont.x, y: cont.y }];
         // If memory explicitly records a link position for this source, prefer that exact link first
         if (memSrc.linkpos) {
           const lx = memSrc.linkpos.x;
           const ly = memSrc.linkpos.y;
           const structs = room.lookForAt(LOOK_STRUCTURES, lx, ly) as Structure[];
-          const exactLink = structs.find(sst => (sst.structureType === STRUCTURE_LINK)) as StructureLink | undefined;
+          const exactLink = structs.find(sst => sst.structureType === STRUCTURE_LINK) as StructureLink | undefined;
           if (exactLink) {
             entry.linkpos = { x: exactLink.pos.x, y: exactLink.pos.y };
           } else {
@@ -143,9 +135,45 @@ function resolveTemplateConfig(room: Room): RoomConfig | null {
 }
 
 export var RoomHelper = {
+  bootstrapOwnedRoom(
+    room: Room,
+    sourceRoom: string,
+    layout: { anchor: { x: number; y: number }; rotation: number }
+  ): void {
+    if (!room.controller?.my) {
+      throw new Error(`Cannot bootstrap unowned room "${room.name}"`);
+    }
+    if (room.memory.config && room.memory.config.type !== "owned") {
+      throw new Error(`Room "${room.name}" already has a non-owned room configuration`);
+    }
 
+    const needsBootstrap = !room.memory.config;
+    if (needsBootstrap) {
+      room.memory.config = {
+        shard: Game.shard.name,
+        type: "owned",
+        roomtemplate: "ricane",
+        roomanchor: { ...layout.anchor },
+        templaterotation: layout.rotation
+      };
+    }
+    initializeRoomData(room);
+    if (!room.memory.sources) room.memory.sources = {};
+    for (const source of room.find(FIND_SOURCES)) {
+      if (!room.memory.sources[source.id]) {
+        room.memory.sources[source.id] = {
+          x: source.pos.x,
+          y: source.pos.y,
+          container: { id: "", x: -1, y: -1 }
+        };
+      }
+    }
+    if (needsBootstrap) {
+      console.log(`[ExpansionManagement] Bootstrapped ${room.name} from ${sourceRoom}`);
+    }
+  },
 
-  loadRoomMemory: function() {
+  loadRoomMemory: function () {
     // Load only configs that were previously applied by the room loader.
     for (const [roomName, roomEntry] of Object.entries(ROOM_CONFIGS)) {
       if (roomEntry.loadOnVisibility) {
@@ -187,7 +215,7 @@ export var RoomHelper = {
   },
 
   // Returns the resolved configuration for a room without modifying memory
-  getRoomValues: function(room: Room): ResolvedRoomConfig {
+  getRoomValues: function (room: Room): ResolvedRoomConfig {
     // Load runtime values from memory first so they are available
     const memoryValues: ResolvedRoomConfig = {
       energysources: [],
@@ -220,7 +248,9 @@ export var RoomHelper = {
     // Ensure spawns are represented as {x,y,direction}
     if (!base.spawns) {
       // Use FIND_MY_STRUCTURES with a filter to get strongly-typed spawns
-      const spawns = room.find<StructureSpawn>(FIND_MY_STRUCTURES, { filter: (s) => s.structureType === STRUCTURE_SPAWN });
+      const spawns = room.find<StructureSpawn>(FIND_MY_STRUCTURES, {
+        filter: s => s.structureType === STRUCTURE_SPAWN
+      });
       if (spawns && spawns.length > 0) {
         base.spawns = spawns.map(s => ({ x: s.pos.x, y: s.pos.y, direction: LEFT }));
       }
@@ -228,13 +258,17 @@ export var RoomHelper = {
 
     // Ensure storagelink is present (coordinate)
     if (!base.storagelink && room.storage) {
-      const link = room.find<StructureLink>(FIND_STRUCTURES, { filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(room.storage!.pos) < 4 })[0];
+      const link = room.find<StructureLink>(FIND_STRUCTURES, {
+        filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(room.storage!.pos) < 4
+      })[0];
       if (link) base.storagelink = { x: link.pos.x, y: link.pos.y };
     }
 
     // Ensure controllerLink is present
     if (!base.controllerLink && room.controller) {
-      const link = room.find<StructureLink>(FIND_STRUCTURES, { filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(room.controller!.pos) < 4 })[0];
+      const link = room.find<StructureLink>(FIND_STRUCTURES, {
+        filter: l => l.structureType === STRUCTURE_LINK && l.pos.getRangeTo(room.controller!.pos) < 4
+      })[0];
       if (link) base.controllerLink = { x: link.pos.x, y: link.pos.y };
     }
 
@@ -246,12 +280,12 @@ export var RoomHelper = {
   },
 
   // Backwards compatible alias: keep getRoomConfig but delegate to getRoomValues
-  getRoomConfig: function(room: Room): ResolvedRoomConfig {
+  getRoomConfig: function (room: Room): ResolvedRoomConfig {
     return this.getRoomValues(room);
   },
 
   // Get config by room name, even if room is not visible
-  getRoomConfigByName: function(roomName: string): ResolvedRoomConfig | RoomConfig | null {
+  getRoomConfigByName: function (roomName: string): ResolvedRoomConfig | RoomConfig | null {
     // First, check if room is visible and has config
     const room = Game.rooms[roomName];
     if (room) {

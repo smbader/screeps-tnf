@@ -1,5 +1,9 @@
-import { extend } from "lodash";
 import { Operator } from "../classes/operator";
+import {
+    isExpansionAssignmentInPhase,
+    recordExpansionRoomIntel
+} from "../operations/ExpansionManagementTypes";
+import type { Waypoint } from "./Claimer";
 
 interface ScoutMemory extends CreepMemory {
     targetRoom: string;
@@ -22,12 +26,12 @@ export class Scout extends Operator {
     memory: {
         roomname?: string;
         name?: string;
-        waypoints?: any[];
+        waypoints?: Waypoint[];
     };
 
     creep: ScoutCreep | null;
 
-    constructor(name: string, room: Room, targetRoom: string, waypoints?: string[]) {
+    constructor(name: string, room: Room, targetRoom: string, waypoints?: Waypoint[]) {
         super(name, room);
 
         this.memory = {};
@@ -50,13 +54,35 @@ export class Scout extends Operator {
             return;
         }
 
+        if (
+            this.creep.memory.operation === "expansionManagement" &&
+            !isExpansionAssignmentInPhase(this.creep.memory.expansionAssignment, "scouting")
+        ) {
+            this.creep.suicide();
+            return;
+        }
+
+        if (
+            this.creep.memory.operation === "expansionManagement" &&
+            this.creep.room.name === this.creep.memory.targetRoom &&
+            recordExpansionRoomIntel(this.creep.room)
+        ) {
+            this.creep.suicide();
+            return;
+        }
+
         if (this.creep.memory.waypoint == undefined) { this.creep.memory.waypoint = 0; }
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.memory.waypoints != undefined) {
             if (this.memory.waypoints[this.creep.memory.waypoint]) {
                 let currentWayPoint = this.memory.waypoints[this.creep.memory.waypoint];
                 let wayPointPos = new RoomPosition(currentWayPoint.x, currentWayPoint.y, currentWayPoint.room);
-                if ('shard' + currentWayPoint.shard !== Game.shard.name){
+                const waypointShard = currentWayPoint.shard
+                    ? currentWayPoint.shard.indexOf("shard") === 0
+                        ? currentWayPoint.shard
+                        : `shard${currentWayPoint.shard}`
+                    : Game.shard.name;
+                if (waypointShard !== Game.shard.name){
                     this.creep.memory.waypoint += 1;
                 } else if (this.creep.pos.getRangeTo(wayPointPos) == 0) {
                     this.creep.memory.waypoint += 1;

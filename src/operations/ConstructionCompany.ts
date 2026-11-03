@@ -31,17 +31,13 @@ export class ConstructionCompany extends Operation {
           continue;
       }
 
-      // To be productive, we need a spawn
-      const spawns = room.find(FIND_MY_SPAWNS);
-      if (spawns.length === 0) {
-        // no spawns
-      } else {
-         for (const spawn of spawns) {
-           // Nothing yet.
-         }
+       // To be productive, we need a spawn
+       const spawns = room.find(FIND_MY_SPAWNS);
+       if (spawns.length === 0) {
+         continue;
        }
 
-      const source = spawns[0].pos.findClosestByRange(FIND_SOURCES);
+       const source = spawns[0].pos.findClosestByRange(FIND_SOURCES);
       if (!source) {
         // no source
       } else {

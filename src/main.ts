@@ -40,6 +40,9 @@ declare global {
         depositPos?: { x: number; y: number };
         depositType?: DepositConstant;
         depositState?: DepositMinerCreepMemory["depositState"];
+        claimMode?: "claim" | "reserve" | "configured";
+        expansionAssignment?: string;
+        expansionSourceId?: Id<Source>;
     }
 
     interface Room {

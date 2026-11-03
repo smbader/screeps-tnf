@@ -1,5 +1,15 @@
 import { Operator } from "../classes/operator";
-import {RoomHelper} from "../utils/RoomHelper";
+import { RoomHelper } from "../utils/RoomHelper";
+import { isExpansionAssignmentInPhase } from "../operations/ExpansionManagementTypes";
+
+export type ClaimMode = "claim" | "reserve" | "configured";
+
+export interface Waypoint {
+    x: number;
+    y: number;
+    room: string;
+    shard?: string;
+}
 
 interface ClaimerMemory extends CreepMemory {
     targetRoom: string;
@@ -25,16 +35,18 @@ export class Claimer extends Operator {
         roomname?: string;
         name?: string;
         targetroom: string;
-        waypoints?: any[];
+        waypoints?: Waypoint[];
+        claimMode: ClaimMode;
     };
 
     creep: ClaimerCreep | null;
 
-    constructor(name: string, room: Room, targetRoom: string, waypoints?: string[]) {
+    constructor(name: string, room: Room, targetRoom: string, waypoints?: Waypoint[], claimMode: ClaimMode = "configured") {
         super(name, room);
 
         this.memory = {
             targetroom: targetRoom,
+            claimMode
         };
 
         this.memory.name = name;
@@ -56,17 +68,25 @@ export class Claimer extends Operator {
         if (!this.creep) {
             return;
         }
-        const cfg1 = RoomHelper.getRoomConfigByName(this.creep.memory.targetRoom);
-
+        if (
+            this.creep.memory.operation === "expansionManagement" &&
+            !isExpansionAssignmentInPhase(this.creep.memory.expansionAssignment, "claiming")
+        ) {
+            this.creep.suicide();
+            return;
+        }
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.memory.waypoints != undefined) {
             if (this.memory.waypoints[this.creep.memory.waypoint]) {
                 let currentWayPoint = this.memory.waypoints[this.creep.memory.waypoint];
-                console.log(this.creep.name + ' moving to waypoint ' + this.creep.memory.waypoint + ' in room ' + currentWayPoint.room);
                 let wayPointPos = new RoomPosition(currentWayPoint.x, currentWayPoint.y, currentWayPoint.room);
 
-                console.log('shard' + currentWayPoint.shard + ' == ' + Game.shard.name);
-                if ('shard' + currentWayPoint.shard !== Game.shard.name){
+                const waypointShard = currentWayPoint.shard
+                    ? currentWayPoint.shard.indexOf("shard") === 0
+                        ? currentWayPoint.shard
+                        : `shard${currentWayPoint.shard}`
+                    : Game.shard.name;
+                if (waypointShard !== Game.shard.name){
                     this.creep.memory.waypoint += 1;
                 } else if (this.creep.pos.getRangeTo(wayPointPos) == 0) {
                     this.creep.memory.waypoint += 1;
@@ -86,11 +106,26 @@ export class Claimer extends Operator {
 
         let claimRoom = Game.rooms[this.creep.memory.targetRoom];
         const cfg = RoomHelper.getRoomConfigByName(this.creep.memory.targetRoom);
+        const playerUsername = this.room.controller?.owner?.username || "ricane";
 
         if (claimRoom && claimRoom.controller) {
+            if (
+                claimRoom.controller.owner &&
+                claimRoom.controller.owner.username !== playerUsername
+            ) {
+                return;
+            }
+            if (
+                this.memory.claimMode === "claim" &&
+                claimRoom.controller.reservation &&
+                claimRoom.controller.reservation.username !== playerUsername
+            ) {
+                return;
+            }
             if (this.creep.pos.getRangeTo(claimRoom.controller.pos) < 2) {
                 let result = 0;
-                if (cfg?.type == 'owned' || cfg?.type == 'defend') {
+                const claimMode = this.memory.claimMode;
+                if (claimMode === "claim" || (claimMode === "configured" && (cfg?.type === "owned" || cfg?.type === "defend"))) {
                     result = this.creep.claimController(claimRoom.controller);
                     this.creep.say('🔐');
                 } else {
@@ -102,6 +137,8 @@ export class Claimer extends Operator {
                     return;
                 } else if (result == OK) {
                     return;
+                } else if (result !== ERR_NOT_IN_RANGE && Game.time % 100 === 0) {
+                    console.log(`[Claimer] ${this.creep.name} could not ${claimMode === "claim" ? "claim" : "reserve"} ${claimRoom.name}: ${result}`);
                 }
             } else {
                 this.creep.travelTo(claimRoom.controller.pos);

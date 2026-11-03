@@ -6,6 +6,7 @@ import {Scout} from "../operator/Scout";
 import {Claimer} from "../operator/Claimer";
 import {TinyFarmer} from "../operator/TinyFarmer";
 import { RoomHelper } from "../utils/RoomHelper";
+import { isExpansionTargetAssigned } from "./ExpansionManagementTypes";
 
 
 export class RemoteFarming extends Operation {
@@ -29,6 +30,9 @@ export class RemoteFarming extends Operation {
     init() {
 
         for (var expansionRoom of this.expansionRooms) {
+            if (isExpansionTargetAssigned(expansionRoom.target)) {
+                continue;
+            }
             let sourceRoom = Game.rooms[expansionRoom.source];
 
             if (expansionRoom.shard != Game.shard.name || sourceRoom == undefined) {
@@ -40,7 +44,7 @@ export class RemoteFarming extends Operation {
 
                 // we can see it.
                 let name = 'Claimer_' + expansionRoom.target;
-                let operator = new Claimer(name, sourceRoom, expansionRoom.target);
+                let operator = new Claimer(name, sourceRoom, expansionRoom.target, undefined, "reserve");
                 this.operationOperators.push(operator);
 
                 name = 'Scout_' + expansionRoom.target;
