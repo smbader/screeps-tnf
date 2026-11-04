@@ -24,6 +24,7 @@ export interface ExpansionAssignment {
   updatedAt: number;
   retries: number;
   reason?: string;
+  forced?: boolean;
 }
 
 export interface ExpansionManagementMemory {
@@ -32,6 +33,7 @@ export interface ExpansionManagementMemory {
   dryRun: boolean;
   currentTarget?: string;
   approvedRoom?: string;
+  forcedRoom?: string;
   assignments: Record<string, ExpansionAssignment>;
   intel: Record<string, ExpansionRoomIntel>;
   lastStatusLog?: number;
@@ -118,6 +120,14 @@ export function evaluateExpansionIntel(
   if (intel.keeperLairs) return "source keeper room";
   if (intel.hostileCreeps > 0) return "hostile creeps present";
   if (intel.sources < minimumSources) return `only ${intel.sources} source(s)`;
+  return null;
+}
+
+// A forced room only needs a claimable controller; source count, hostiles and registration are ignored.
+export function evaluateForcedExpansionIntel(intel: ExpansionRoomIntel, username: string): string | null {
+  if (!intel.controller) return "no controller";
+  if (intel.owner) return `owned by ${intel.owner}`;
+  if (intel.reservation && intel.reservation !== username) return `reserved by ${intel.reservation}`;
   return null;
 }
 

@@ -1,12 +1,6 @@
 import { Operation } from "../classes/operation";
 import { QuadController, QuadMember, FileAdvanceResult } from "./QuadController";
-import {
-  attackWithMembers,
-  chooseCreepFocus,
-  findStructureAt,
-  healMembers,
-  isArmed
-} from "./SiegeCombat";
+import { attackWithMembers, chooseCreepFocus, findStructureAt, healMembers, isArmed } from "./SiegeCombat";
 import {
   QUAD_BODIES,
   assessThreats,
@@ -83,7 +77,9 @@ const liveSnapshots: Record<string, RoomSnapshot> = {};
     if (structure.structureType === STRUCTURE_RAMPART) entry.pub = (structure as StructureRampart).isPublic;
     return entry;
   });
-  const creeps = room.find(FIND_HOSTILE_CREEPS).map(creep => ({ x: creep.pos.x, y: creep.pos.y, o: creep.owner.username }));
+  const creeps = room
+    .find(FIND_HOSTILE_CREEPS)
+    .map(creep => ({ x: creep.pos.x, y: creep.pos.y, o: creep.owner.username }));
   const json = JSON.stringify({ room: roomName, tick: Game.time, terrain: rows, structures, creeps });
   console.log(json);
   return `dumped ${structures.length} structures`;
@@ -227,7 +223,11 @@ export class SiegeOperation extends Operation {
       if (creepMemory.role !== "siegeQuad" || creepMemory.siegeId !== memory.id || !creepMemory.slot) continue;
       const known = memory.members[creepMemory.slot];
       if (known && Game.creeps[known.name]) continue;
-      memory.members[creepMemory.slot] = { name: creep.name, spawnRoom: creep.memory.room || creep.room.name, spawnedAt: Game.time };
+      memory.members[creepMemory.slot] = {
+        name: creep.name,
+        spawnRoom: creep.memory.room || creep.room.name,
+        spawnedAt: Game.time
+      };
     }
   }
 
@@ -258,7 +258,9 @@ export class SiegeOperation extends Operation {
 
     const wasInField = IN_ROOM_PHASES.includes(memory.phase) || memory.phase === "RETREATING";
     if (quad.members.length) {
-      memory.lastMinTtl = Math.min(...quad.members.map(member => member.creep.ticksToLive || SIEGE_POLICY.creepLifetime));
+      memory.lastMinTtl = Math.min(
+        ...quad.members.map(member => member.creep.ticksToLive || SIEGE_POLICY.creepLifetime)
+      );
     }
     if (wasInField && alive === 0) {
       this.onWipe(memory);
@@ -276,10 +278,18 @@ export class SiegeOperation extends Operation {
         if (missing.length) this.setPhase(memory, "PREPARING", "replacing members");
         else if (quad.isComplete && quad.members.every(member => this.getBoostAction(memory, member) === null)) {
           const inTarget = quad.members.every(member => member.creep.pos.roomName === memory.targetRoom);
-          this.setPhase(memory, inTarget ? "STAGING" : "TRANSIT", inTarget ? "already in target room" : "travelling to gather room");
+          this.setPhase(
+            memory,
+            inTarget ? "STAGING" : "TRANSIT",
+            inTarget ? "already in target room" : "travelling to gather room"
+          );
         } else {
-          const waiting = quad.members.filter(member => this.getBoostAction(memory, member) !== null).map(member => member.slot);
-          memory.status = `boosting: ${memory.unboosted ? "unboosted" : "boosted"} mode, boostRoom=${memory.boostRoom || "none"}, complete=${quad.isComplete}, waiting on ${waiting.join(",") || "none"}`;
+          const waiting = quad.members
+            .filter(member => this.getBoostAction(memory, member) !== null)
+            .map(member => member.slot);
+          memory.status = `boosting: ${memory.unboosted ? "unboosted" : "boosted"} mode, boostRoom=${
+            memory.boostRoom || "none"
+          }, complete=${quad.isComplete}, waiting on ${waiting.join(",") || "none"}`;
         }
         break;
       case "TRANSIT":
@@ -314,9 +324,24 @@ export class SiegeOperation extends Operation {
         break;
     }
 
+    this.releaseBoostLabsAfterDeparture(memory, quad);
+
     if (memory.phase === "CLEANUP" && alive === 0 && memory.spawnsCleared) {
       this.finish(memory, "COMPLETE", "cleanup finished");
     }
+  }
+
+  private releaseBoostLabsAfterDeparture(memory: SiegeMemory, quad: QuadController): void {
+    const boostRoom = memory.boostRoom;
+    if (
+      !boostRoom ||
+      quad.members.length !== QUAD_SLOTS.length ||
+      ["PREPARING", "ASSEMBLING"].includes(memory.phase) ||
+      !quad.members.every(member => member.creep.room.name !== boostRoom)
+    ) {
+      return;
+    }
+    this.releaseBoostLabs(memory);
   }
 
   private finish(memory: SiegeMemory, phase: "COMPLETE" | "ABORTED", status: string): void {
@@ -433,7 +458,9 @@ export class SiegeOperation extends Operation {
       const towers = snapshot.structures.filter(structure => structure.type === "tower" && structure.hostile);
       const active = towers.filter(tower => (tower.energy || 0) >= 10).length;
       return [
-        `owner=${snapshot.owner || "none"} mode=${memory.unboosted ? "unboosted" : "boosted"} towers=${active}/${towers.length} active (snapshot age ${Game.time - snapshot.tick})`,
+        `owner=${snapshot.owner || "none"} mode=${memory.unboosted ? "unboosted" : "boosted"} towers=${active}/${
+          towers.length
+        } active (snapshot age ${Game.time - snapshot.tick})`,
         ...result.reasons
       ];
     }
@@ -546,7 +573,10 @@ export class SiegeOperation extends Operation {
   }
 
   private getBoostLabCandidates(room: Room): StructureLab[] {
-    const reagents = new Set<string>((room.memory.data?.labs?.reagents || []).map(entry => entry.id));
+    const reagents = new Set<string>([
+      ...(room.memory.data?.labs?.reagents || []).map(entry => entry.id),
+      ...(room.memory.data?.labs?.production?.inputLabIds || [])
+    ]);
     return room
       .find<StructureLab>(FIND_MY_STRUCTURES, { filter: structure => structure.structureType === STRUCTURE_LAB })
       .filter(lab => !reagents.has(lab.id));
@@ -618,7 +648,10 @@ export class SiegeOperation extends Operation {
   }
 
   // Returns the next lab action for a member, "wait" while stock is missing, or null once boosting is complete.
-  private getBoostAction(memory: SiegeMemory, member: QuadMember): { lab: StructureLab; count: number } | "wait" | null {
+  private getBoostAction(
+    memory: SiegeMemory,
+    member: QuadMember
+  ): { lab: StructureLab; count: number } | "wait" | null {
     if (memory.unboosted) return null;
     const room = memory.boostRoom ? Game.rooms[memory.boostRoom] : undefined;
     const compounds = memory.boostCompounds;
@@ -720,7 +753,8 @@ export class SiegeOperation extends Operation {
         for (let y = Math.max(2, origin.pos.y - radius); y <= Math.min(47, origin.pos.y + radius); y++) {
           const k = `${x},${y}`;
           if (terrain.get(x, y) === TERRAIN_MASK_WALL || blocked.has(k) || near.has(k) || taken.has(k)) continue;
-          const score = Math.max(Math.abs(x - origin.pos.x), Math.abs(y - origin.pos.y)) * 2 + (terrain.get(x, y) ? 3 : 0);
+          const score =
+            Math.max(Math.abs(x - origin.pos.x), Math.abs(y - origin.pos.y)) * 2 + (terrain.get(x, y) ? 3 : 0);
           if (!best || score < best.score) best = { pos: new RoomPosition(x, y, room.name), score };
         }
       }
@@ -937,7 +971,8 @@ export class SiegeOperation extends Operation {
       for (let dy = -3; dy <= 3; dy++) {
         const x = blocker.pos.x + dx;
         const y = blocker.pos.y + dy;
-        if (x < 1 || y < 1 || x > 48 || y > 48 || terrain.get(x, y) === TERRAIN_MASK_WALL || taken.has(`${x},${y}`)) continue;
+        if (x < 1 || y < 1 || x > 48 || y > 48 || terrain.get(x, y) === TERRAIN_MASK_WALL || taken.has(`${x},${y}`))
+          continue;
         candidates.push({ x, y, range: Math.max(Math.abs(dx), Math.abs(dy)) });
       }
     }
@@ -946,7 +981,11 @@ export class SiegeOperation extends Operation {
     const settled = new Set<string>();
     for (const member of quad.members) {
       const pos = member.creep.pos;
-      if (pos.roomName === room.name && candidates.some(tile => tile.x === pos.x && tile.y === pos.y) && !used.has(`${pos.x},${pos.y}`)) {
+      if (
+        pos.roomName === room.name &&
+        candidates.some(tile => tile.x === pos.x && tile.y === pos.y) &&
+        !used.has(`${pos.x},${pos.y}`)
+      ) {
         used.add(`${pos.x},${pos.y}`);
         settled.add(member.creep.name);
       }
@@ -964,8 +1003,9 @@ export class SiegeOperation extends Operation {
     return (
       room
         .lookForAt(LOOK_STRUCTURES, pos.x, pos.y)
-        .find(structure => structure.structureType === STRUCTURE_RAMPART || structure.structureType === STRUCTURE_WALL) ||
-      null
+        .find(
+          structure => structure.structureType === STRUCTURE_RAMPART || structure.structureType === STRUCTURE_WALL
+        ) || null
     );
   }
 
@@ -1078,7 +1118,9 @@ export class SiegeOperation extends Operation {
     const controllerGoal = plan.objective === "CONTROLLER";
     const objective = controllerGoal ? room.controller : Game.getObjectById(plan.targetId as Id<Structure>);
     const focus: Creep | Structure | null =
-      chooseCreepFocus(hostiles, quad.members) || breachStructure || (nextStep || controllerGoal ? null : (objective as Structure | null));
+      chooseCreepFocus(hostiles, quad.members) ||
+      breachStructure ||
+      (nextStep || controllerGoal ? null : (objective as Structure | null));
 
     healMembers(quad.members);
     attackWithMembers(quad.members, focus, hostiles, this.getHostileStructures(room));
@@ -1235,10 +1277,14 @@ export class SiegeOperation extends Operation {
         .members.map(
           member =>
             `${member.slot}@${member.creep.pos.roomName}(${member.creep.pos.x},${member.creep.pos.y})` +
-            `${member.creep.spawning ? " spawning" : ""} fat=${member.creep.fatigue} move=${member.creep.getActiveBodyparts(MOVE)}`
+            `${member.creep.spawning ? " spawning" : ""} fat=${
+              member.creep.fatigue
+            } move=${member.creep.getActiveBodyparts(MOVE)}`
         )
         .join("; ");
-      console.log(`[Siege ${memory.id}] gather=${memory.gatherRoom}(${memory.gatherAnchor?.x},${memory.gatherAnchor?.y}) ${detail}`);
+      console.log(
+        `[Siege ${memory.id}] gather=${memory.gatherRoom}(${memory.gatherAnchor?.x},${memory.gatherAnchor?.y}) ${detail}`
+      );
     }
   }
 }

@@ -10,8 +10,10 @@ import {
   EXPANSION_POLICY,
   ExpansionAssignment,
   ExpansionCandidate,
+  ExpansionRoomIntel,
   ensureExpansionMemory,
   evaluateExpansionIntel,
+  evaluateForcedExpansionIntel,
   getAcceptableExpansionCandidates,
   getExpansionCandidates
 } from "./ExpansionManagementTypes";
@@ -35,6 +37,7 @@ export class ExpansionManagement extends Operation {
     this.operationOperators = [];
     const memory = ensureExpansionMemory();
     if (!memory.enabled) return;
+    if (memory.forcedRoom) memory.approvedRoom = memory.forcedRoom;
     const homes = this.getEligibleHomes();
     const candidates = homes.length > 0 ? this.getCandidates(homes) : [];
     this.logAcceptableCandidates(candidates);
@@ -99,7 +102,7 @@ export class ExpansionManagement extends Operation {
       assignment.phase = "claiming";
       assignment.updatedAt = Game.time;
       assignment.reason = undefined;
-      memory.approvedRoom = undefined;
+      this.consumeApproval(memory);
       this.createAssignmentOperators(assignment);
       return;
     }
@@ -127,13 +130,14 @@ export class ExpansionManagement extends Operation {
             memory.assignments[approvedCandidate.roomName] = assignment;
           }
           memory.currentTarget = approvedCandidate.roomName;
+          if (memory.forcedRoom === approvedCandidate.roomName) assignment.forced = true;
           if (memory.dryRun) {
             assignment.reason = "approved; disable dry-run to begin claiming";
           } else {
             assignment.phase = "claiming";
             assignment.updatedAt = Game.time;
             assignment.reason = undefined;
-            memory.approvedRoom = undefined;
+            this.consumeApproval(memory);
             this.createAssignmentOperators(assignment);
           }
           return;
@@ -155,7 +159,8 @@ export class ExpansionManagement extends Operation {
       phase: "scouting",
       createdAt: Game.time,
       updatedAt: Game.time,
-      retries: 0
+      retries: 0,
+      forced: memory.forcedRoom === selected.roomName || undefined
     };
     memory.assignments[selected.roomName] = newAssignment;
     memory.currentTarget = selected.roomName;
@@ -200,7 +205,26 @@ export class ExpansionManagement extends Operation {
     const intel = ensureExpansionMemory().intel[targetRoom];
     if (!intel || Game.time - intel.lastSeen > EXPANSION_POLICY.maximumIntelAge)
       return "room intel is missing or stale";
-    if (!intel.layout) return "no valid default-layout placement was found";
+    if (!intel.layout && !this.isForced(targetRoom)) return "no valid default-layout placement was found";
+    return this.evaluateIntel(intel);
+  }
+
+  // Forced rooms do not need a computed layout; the room config supplies it.
+  private isForced(roomName: string): boolean {
+    const memory = ensureExpansionMemory();
+    return roomName === memory.forcedRoom || !!memory.assignments[roomName]?.forced;
+  }
+
+  private consumeApproval(memory: ReturnType<typeof ensureExpansionMemory>): void {
+    memory.approvedRoom = undefined;
+    memory.forcedRoom = undefined;
+  }
+
+  private evaluateIntel(intel: ExpansionRoomIntel): string | null {
+    const memory = ensureExpansionMemory();
+    if (intel.roomName === memory.forcedRoom || memory.assignments[intel.roomName]?.forced) {
+      return evaluateForcedExpansionIntel(intel, PLAYER_USERNAME);
+    }
     return evaluateExpansionIntel(intel, PLAYER_USERNAME, EXPANSION_POLICY.minimumSources);
   }
 
@@ -324,13 +348,9 @@ export class ExpansionManagement extends Operation {
     if (assignment.phase === "scouting") {
       if (targetRoom) {
         const intel = this.captureVisibleIntel(targetRoom);
-        const reason = evaluateExpansionIntel(intel, PLAYER_USERNAME, EXPANSION_POLICY.minimumSources);
-        if (reason || !intel.layout) {
+        const reason = this.evaluateIntel(intel);
+        if (reason || (!intel.layout && !this.isForced(assignment.targetRoom))) {
           this.failAssignment(assignment, reason || "no valid default-layout placement was found");
-          return;
-        }
-        if (!intel.layout) {
-          this.failAssignment(assignment, "no valid default-layout placement was found");
           return;
         }
         assignment.updatedAt = Game.time;
@@ -350,8 +370,8 @@ export class ExpansionManagement extends Operation {
     if (assignment.phase === "ready" && !memory.dryRun) {
       if (targetRoom) {
         const intel = this.captureVisibleIntel(targetRoom);
-        const reason = evaluateExpansionIntel(intel, PLAYER_USERNAME, EXPANSION_POLICY.minimumSources);
-        if (reason || !intel.layout) {
+        const reason = this.evaluateIntel(intel);
+        if (reason || (!intel.layout && !this.isForced(assignment.targetRoom))) {
           this.failAssignment(assignment, reason || "no valid default-layout placement was found");
           return;
         }
@@ -372,8 +392,8 @@ export class ExpansionManagement extends Operation {
         return;
       } else {
         const intel = this.captureVisibleIntel(targetRoom);
-        const reason = evaluateExpansionIntel(intel, PLAYER_USERNAME, EXPANSION_POLICY.minimumSources);
-        if (reason || !intel.layout) {
+        const reason = this.evaluateIntel(intel);
+        if (reason || (!intel.layout && !this.isForced(assignment.targetRoom))) {
           this.failAssignment(assignment, reason || "no valid default-layout placement was found");
           return;
         }
@@ -392,7 +412,7 @@ export class ExpansionManagement extends Operation {
           const refreshedIntel = this.captureVisibleIntel(ownedRoom);
           layout = refreshedIntel.layout;
         }
-        if (!layout) {
+        if (!layout && !this.isForced(assignment.targetRoom)) {
           this.logStatus(`Cannot bootstrap ${assignment.targetRoom}: no valid default-layout placement was found.`);
           return;
         }
@@ -552,16 +572,18 @@ export class ExpansionManagement extends Operation {
   private getCandidates(homes: Room[]): ExpansionCandidate[] {
     const memory = ensureExpansionMemory();
     const homeNames = homes.map(room => room.name);
-    return getExpansionCandidates(
+    const exitsOf = (roomName: string): string[] => {
+      const exits = Game.map.describeExits(roomName);
+      return exits ? Object.values(exits) : [];
+    };
+    const candidates = getExpansionCandidates(
       homeNames,
-      roomName => {
-        const exits = Game.map.describeExits(roomName);
-        return exits ? Object.values(exits) : [];
-      },
+      exitsOf,
       EXPANSION_POLICY.maximumDistance,
       EXPANSION_POLICY.maximumCandidates
     ).filter(candidate => {
       if (homeNames.includes(candidate.roomName)) return false;
+      if (candidate.roomName === memory.forcedRoom) return true;
       if (
         memory.assignments[candidate.roomName]?.phase === "failed" &&
         Game.time - memory.assignments[candidate.roomName].updatedAt <= EXPANSION_POLICY.maximumIntelAge
@@ -582,6 +604,25 @@ export class ExpansionManagement extends Operation {
       const status = Game.map.getRoomStatus(candidate.roomName);
       return status.status === "normal";
     });
+
+    const forcedRoom = memory.forcedRoom;
+    if (
+      forcedRoom &&
+      !homeNames.includes(forcedRoom) &&
+      !Game.rooms[forcedRoom]?.controller?.my &&
+      Game.map.getRoomStatus(forcedRoom).status === "normal"
+    ) {
+      if (!candidates.some(candidate => candidate.roomName === forcedRoom)) {
+        const forced = getExpansionCandidates(homeNames, exitsOf, 10, 10000).find(
+          candidate => candidate.roomName === forcedRoom
+        );
+        if (forced) candidates.push(forced);
+      }
+    } else if (forcedRoom) {
+      this.logStatus(`Forced room ${forcedRoom} cannot be used: closed, already owned, or a home room.`);
+      return candidates.filter(candidate => candidate.roomName !== forcedRoom);
+    }
+    return candidates;
   }
 
   private selectCandidate(candidates: ExpansionCandidate[]): ExpansionCandidate | undefined {
@@ -590,6 +631,18 @@ export class ExpansionManagement extends Operation {
       const assignment = memory.assignments[candidate.roomName];
       return !assignment || assignment.phase === "failed";
     });
+    const forcedCandidate = availableCandidates.find(candidate => candidate.roomName === memory.forcedRoom);
+    if (forcedCandidate) {
+      const prior = memory.assignments[forcedCandidate.roomName];
+      const intel = memory.intel[forcedCandidate.roomName];
+      const retryWait = prior?.phase === "failed" && Game.time - prior.updatedAt < 100;
+      if (!retryWait && (!intel || Game.time - intel.lastSeen > EXPANSION_POLICY.maximumIntelAge)) {
+        return forcedCandidate;
+      }
+      const reason = prior?.reason || this.getApprovalError(forcedCandidate.roomName, candidates) || "unknown";
+      this.logStatus(`Forced room ${forcedCandidate.roomName} is waiting: ${reason}.`);
+      return undefined;
+    }
     const freshCandidates = getAcceptableExpansionCandidates(
       availableCandidates,
       memory.intel,

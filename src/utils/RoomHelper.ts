@@ -138,17 +138,17 @@ export var RoomHelper = {
   bootstrapOwnedRoom(
     room: Room,
     sourceRoom: string,
-    layout: { anchor: { x: number; y: number }; rotation: number }
+    layout?: { anchor: { x: number; y: number }; rotation: number }
   ): void {
     if (!room.controller?.my) {
       throw new Error(`Cannot bootstrap unowned room "${room.name}"`);
     }
-    if (room.memory.config && room.memory.config.type !== "owned") {
+    if (room.memory.config && room.memory.config.type !== "owned" && ROOM_CONFIGS[room.name]) {
       throw new Error(`Room "${room.name}" already has a non-owned room configuration`);
     }
 
-    const needsBootstrap = !room.memory.config;
-    if (needsBootstrap) {
+    const needsBootstrap = (!room.memory.config || room.memory.config.type !== "owned") && !!layout;
+    if (needsBootstrap && layout) {
       room.memory.config = {
         shard: Game.shard.name,
         type: "owned",
@@ -157,8 +157,11 @@ export var RoomHelper = {
         templaterotation: layout.rotation
       };
     }
+    if (room.memory.config?.type !== "owned") {
+      console.log(`[ExpansionManagement] ${room.name} has no owned room config yet; add it to the room registry.`);
+      return;
+    }
     initializeRoomData(room);
-    if (!room.memory.sources) room.memory.sources = {};
     for (const source of room.find(FIND_SOURCES)) {
       if (!room.memory.sources[source.id]) {
         room.memory.sources[source.id] = {

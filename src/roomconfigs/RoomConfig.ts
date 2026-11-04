@@ -92,7 +92,21 @@ export interface RoomRuntimeData {
     reagents: { id: Id<StructureLab>; component: ResourceConstant }[];
     products: { id: Id<StructureLab> }[];
     boosts: { id: Id<StructureLab>; component: ResourceConstant }[];
+    production?: LabProductionState;
+    productionStatus?: string;
   };
+}
+
+export interface LabProductionState {
+  version: 1;
+  inputLabIds: [Id<StructureLab>, Id<StructureLab>];
+  configuredLabIds: Id<StructureLab>[];
+  paused?: boolean;
+  activeProduct?: ResourceConstant;
+  activeReagents?: [ResourceConstant, ResourceConstant];
+  lastMarketAttempt?: number;
+  lastStatus?: string;
+  lastError?: string;
 }
 
 export interface RoomSourceMemory {
