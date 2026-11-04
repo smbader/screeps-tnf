@@ -36,6 +36,8 @@ class RemoteAttack extends Operation {
         { target: 'E31N4', source: 'E31N3', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         //{ target: "E31N2", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
         { target: "E33S0", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
+        { target: "E33S1", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
+        { target: "E33S1", source: 'E37S1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
     ];
 
     constructor() {

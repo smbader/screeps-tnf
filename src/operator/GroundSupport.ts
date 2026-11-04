@@ -13,6 +13,18 @@ import {
 } from "./GroundSupportLabProduction";
 import { RoomHelper } from "../utils/RoomHelper";
 
+// Set to true to print GroundSupport activity to the console.
+const GROUND_SUPPORT_DEBUG = false;
+
+function debugLog(message: string): void {
+  if (GROUND_SUPPORT_DEBUG) console.log(message);
+}
+
+// Errors always print, regardless of the debug flag.
+function errorLog(message: string): void {
+  console.log(message);
+}
+
 const DEPOSIT_MARKET_RESOURCES: DepositConstant[] = ["mist", "biomass", "metal", "silicon"];
 const BOOST_LAB_STORAGE_ENERGY_FLOOR = 30000;
 const LAB_INPUT_BUFFER = 1000;
@@ -84,7 +96,7 @@ export class GroundSupport extends Operator {
 
     // Run creep actions, if not working a task find one.
     if (this.creep.memory.task) {
-      console.log(`${this.creep.name} working on task ${this.creep.memory.task}`);
+      debugLog(`${this.creep.name} working on task ${this.creep.memory.task}`);
 
       try {
         switch (this.creep.memory.task) {
@@ -141,7 +153,7 @@ export class GroundSupport extends Operator {
             break;
         }
       } catch (e) {
-        console.log(`Error in GroundSupport actions for creep ${this.creep.name}: ${e}`);
+        errorLog(`Error in GroundSupport actions for creep ${this.creep.name}: ${e}`);
       }
     } else {
       try {
@@ -162,7 +174,7 @@ export class GroundSupport extends Operator {
         // Find a new task for the creep
         this.findNewTask();
       } catch (e) {
-        console.log(`Error in GroundSupport finding new task for creep ${this.creep.name}: ${e}`);
+        errorLog(`Error in GroundSupport finding new task for creep ${this.creep.name}: ${e}`);
       }
     }
   }
@@ -174,70 +186,70 @@ export class GroundSupport extends Operator {
 
     // 00. Room storage is too low, look for energy
     if (this.roomStorageLowCheck()) {
-      console.log(`${this.room.name} GroundSupport 00: Storage level.`);
+      debugLog(`${this.room.name} GroundSupport 00: Storage level.`);
       this.creep.memory.task = "FILL_STORAGE_FROM_TERMINAL";
       return;
     }
 
     // 01. Room storage has excess energy, look to distribute it
     if (this.roomStorageHighCheck()) {
-      console.log(`${this.room.name} GroundSupport 01: Storage level.`);
+      debugLog(`${this.room.name} GroundSupport 01: Storage level.`);
       this.creep.memory.task = "FILL_TERMINAL_FROM_STORAGE";
       return;
     }
 
     // 02. Room terminal needs energy
     if (this.roomTerminalLowCheck()) {
-      console.log(`${this.room.name} GroundSupport 02: Terminal level.`);
+      debugLog(`${this.room.name} GroundSupport 02: Terminal level.`);
       this.creep.memory.task = "FILL_TERMINAL_FROM_STORAGE";
       return;
     }
 
     // 03. Room terminal has excess energy
     if (this.roomTerminalHighCheck()) {
-      console.log(`${this.room.name} GroundSupport 03: Terminal level.`);
+      debugLog(`${this.room.name} GroundSupport 03: Terminal level.`);
       this.creep.memory.task = "FILL_STORAGE_FROM_TERMINAL";
       return;
     }
 
     // 04. Fill field link 1
     if (this.fieldLink1Check()) {
-      console.log(`${this.room.name} GroundSupport 04. Field Link 1 level.`);
+      debugLog(`${this.room.name} GroundSupport 04. Field Link 1 level.`);
       this.creep.memory.task = "FILL_FIELD_LINK_1";
       return;
     }
 
     // 05. Offload source link 1
     if (this.sourceLink1Check()) {
-      console.log(`${this.room.name} GroundSupport 05. Source Link 1 level.`);
+      debugLog(`${this.room.name} GroundSupport 05. Source Link 1 level.`);
       this.creep.memory.task = "OFFLOAD_SOURCE_LINK_1";
       return;
     }
 
     // 06. Fill field link 2
     if (this.fieldLink2Check()) {
-      console.log(`${this.room.name} GroundSupport 06. Field Link 2 level.`);
+      debugLog(`${this.room.name} GroundSupport 06. Field Link 2 level.`);
       this.creep.memory.task = "FILL_FIELD_LINK_2";
       return;
     }
 
     // 07. Offload source link 2
     if (this.sourceLink2Check()) {
-      console.log(`${this.room.name} GroundSupport 07. Source Link 2 level.`);
+      debugLog(`${this.room.name} GroundSupport 07. Source Link 2 level.`);
       this.creep.memory.task = "OFFLOAD_SOURCE_LINK_2";
       return;
     }
 
     // 08. Fill controller link
     if (this.controllerLinkCheck()) {
-      console.log(`${this.room.name} GroundSupport 08. Controller Link level.`);
+      debugLog(`${this.room.name} GroundSupport 08. Controller Link level.`);
       this.creep.memory.task = "FILL_CONTROLLER_LINK";
       return;
     }
 
     // 09. Fill critically low towers
     if (this.towerCriticalCheck()) {
-      console.log(`${this.room.name} GroundSupport 09. Tower levels critical.`);
+      debugLog(`${this.room.name} GroundSupport 09. Tower levels critical.`);
       this.creep.memory.task = "FILL_TOWERS_CRITICAL";
       return;
     }
@@ -255,12 +267,12 @@ export class GroundSupport extends Operator {
 
     // 11. Fill power spawns
     if (this.powerSpawnEnergyCheck()) {
-      console.log(`${this.room.name} GroundSupport 11. Power Spawn energy low.`);
+      debugLog(`${this.room.name} GroundSupport 11. Power Spawn energy low.`);
       this.creep.memory.task = "FILL_POWER_SPAWW_ENERGY";
       return;
     }
     if (this.powerSpawnPowerCheck()) {
-      console.log(`${this.room.name} GroundSupport 11. Power Spawn power low.`);
+      debugLog(`${this.room.name} GroundSupport 11. Power Spawn power low.`);
       this.creep.memory.task = "FILL_POWER_SPAWN_POWER";
       return;
     }
@@ -269,7 +281,7 @@ export class GroundSupport extends Operator {
 
     // 15. Fill critically low towers
     if (this.towerCheck()) {
-      console.log(`${this.room.name} GroundSupport 15. Tower levels.`);
+      debugLog(`${this.room.name} GroundSupport 15. Tower levels.`);
       this.creep.memory.task = "FILL_TOWERS";
       return;
     }
@@ -281,7 +293,7 @@ export class GroundSupport extends Operator {
 
     // 16. Room terminal low resource check (non-energy)
     if (this.roomTerminalResourceLowCheck()) {
-      console.log(`${this.room.name} GroundSupport 16: Resource Low.`);
+      debugLog(`${this.room.name} GroundSupport 16: Resource Low.`);
       this.creep.memory.task = "FILL_TERMINAL_RESOURCES_FROM_STORAGE";
       return;
     }
@@ -1185,7 +1197,7 @@ export class GroundSupport extends Operator {
       } else if (result === OK) {
         this.clearCreepTask(creep);
       } else {
-        console.log(`[${this.room.name}] GroundSupport could not move ${resource} to destination: ${result}`);
+        errorLog(`[${this.room.name}] GroundSupport could not move ${resource} to destination: ${result}`);
         if (result !== ERR_FULL) this.clearCreepTask(creep);
       }
       return;
@@ -1215,7 +1227,7 @@ export class GroundSupport extends Operator {
     if (withdrawalResult === ERR_NOT_IN_RANGE) {
       creep.moveTo(storage, { visualizePathStyle: { stroke: "#ffaa00" } });
     } else if (withdrawalResult !== OK) {
-      console.log(`[${this.room.name}] GroundSupport could not withdraw ${resource}: ${withdrawalResult}`);
+      errorLog(`[${this.room.name}] GroundSupport could not withdraw ${resource}: ${withdrawalResult}`);
       this.clearCreepTask(creep);
     }
   }
@@ -1410,7 +1422,7 @@ export class GroundSupport extends Operator {
         const error = `reaction error ${result} for ${plan.recipe.product} in lab ${lab.id}`;
         if (state.lastError !== error) {
           state.lastError = error;
-          console.log(`[${this.room.name}] GroundSupport labs ${error}`);
+          errorLog(`[${this.room.name}] GroundSupport labs ${error}`);
         }
       } else if (result === OK) {
         state.lastError = undefined;
@@ -1782,7 +1794,7 @@ export class GroundSupport extends Operator {
     if (state?.lastStatus === message || labsMemory?.productionStatus === message) return;
     if (state) state.lastStatus = message;
     if (labsMemory) labsMemory.productionStatus = message;
-    console.log(`[${this.room.name}] GroundSupport labs ${message}`);
+    debugLog(`[${this.room.name}] GroundSupport labs ${message}`);
   }
 
   private clearCreepTask(creep: GroundSupportCreep | null): void {

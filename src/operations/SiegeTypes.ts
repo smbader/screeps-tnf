@@ -64,7 +64,7 @@ export interface SiegePolicy {
 export const SIEGE_POLICY: SiegePolicy = {
   enabled: true,
   debug: true,
-  targets: [{ id: "alpha", targetRoom: "E33S1" }],
+  targets: [],
   minimumCpuBucket: 3000,
   observerRange: 10,
   scanInterval: 25,
