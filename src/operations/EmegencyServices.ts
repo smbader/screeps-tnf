@@ -21,7 +21,7 @@ export class EmergencyServices extends Operation {
                 continue;
             }
             const cfgRoom = RoomHelper.getRoomConfig(room);
-            if (!cfgRoom || cfgRoom.type !== 'owned') {
+            if (!cfgRoom) {
                 continue;
             }
             if (cfgRoom.shard && cfgRoom.shard != Game.shard.name) {
@@ -30,19 +30,20 @@ export class EmergencyServices extends Operation {
 
             if (room.energyAvailable < 1000) {
                 room.memory.starvedTime += 1;
+                console.log('[' + room.name + '] Starve time: ' + room.memory.starvedTime);
             } else if (room.energyAvailable >= 1000) {
                 room.memory.starvedTime = 0;
             }
 
             let name = '';
-            let idx = 0;
 
-            for(var sourceid in cfgRoom.energysources) {
+            for(var idx in cfgRoom.energysources) {
                 let parkingSpaces = (cfgRoom.energysources[idx].parkingspots || []).length;
 
                 // 3 for each parking spot, pull, travel, offloading
                 // there should be max limit because of the source regen
                 let perSource = 1;
+                //console.log(JSON.stringify(cfgRoom.energysources[idx].parkingspots));
                 if (room.controller?.level <= 3 || ((room.controller?.level == 4) && !room.storage)) {
                     perSource = 2;
                 }
@@ -52,7 +53,6 @@ export class EmergencyServices extends Operation {
                     let eoperator = new EmergencyWorker(name, room, room, cfgRoom.energysources[idx].id);
                     this.operationOperators.push(eoperator);
                 }
-                idx++;
             }
 
         }

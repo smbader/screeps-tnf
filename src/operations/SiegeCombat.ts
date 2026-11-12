@@ -74,7 +74,8 @@ export function attackWithMembers(
   members: QuadMember[],
   focus: Creep | Structure | null,
   hostiles: Creep[],
-  fallbackTargets: Structure[]
+  fallbackTargets: Structure[],
+  onAttack?: (creep: Creep, action: string, result: number) => void
 ): void {
   for (const member of members) {
     const creep = member.creep;
@@ -82,7 +83,8 @@ export function attackWithMembers(
 
     const nearbyHostiles = hostiles.filter(hostile => creep.pos.getRangeTo(hostile) <= RANGED_ATTACK_RANGE);
     if (nearbyHostiles.length >= 3 && !(focus && creep.pos.getRangeTo(focus) <= RANGED_ATTACK_RANGE)) {
-      creep.rangedMassAttack();
+      const result = creep.rangedMassAttack();
+      if (onAttack) onAttack(creep, "mass attack", result);
       continue;
     }
 
@@ -94,6 +96,9 @@ export function attackWithMembers(
     if (!target) {
       target = fallbackTargets.find(structure => creep.pos.getRangeTo(structure) <= RANGED_ATTACK_RANGE);
     }
-    if (target) creep.rangedAttack(target);
+    if (target) {
+      const result = creep.rangedAttack(target);
+      if (onAttack) onAttack(creep, `ranged attack ${target.id}`, result);
+    }
   }
 }

@@ -30,18 +30,153 @@ const SPAWN_DIRECTIONS: DirectionConstant[] = [
   TOP_RIGHT
 ];
 
+// Tick-by-tick trace of what the operation is doing. Memory.expansionManagement.debug overrides this at runtime.
+const EXPANSION_DEBUG = false;
+
 export class ExpansionManagement extends Operation {
   private operationOperators: Operator[] = [];
 
+  private get debugEnabled(): boolean {
+    const memory = ensureExpansionMemory();
+    return memory.debug !== undefined ? memory.debug : EXPANSION_DEBUG;
+  }
+
+  private debug(message: string): void {
+    if (this.debugEnabled) console.log(`[ExpansionManagement][${Game.time}] ${message}`);
+  }
+
   public init(): void {
+    this.runInit();
+    this.debugReport();
+  }
+
+  private getHomeIneligibleReason(room: Room): string | null {
+    if (!room.controller?.my) return null;
+    if (room.controller.level < EXPANSION_POLICY.minimumHomeControllerLevel) {
+      return `RCL ${room.controller.level} < ${EXPANSION_POLICY.minimumHomeControllerLevel}`;
+    }
+    if (!room.storage) return "no storage";
+    const energy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
+    if (energy < EXPANSION_POLICY.minimumStorageEnergy) {
+      return `storage energy ${energy} < ${EXPANSION_POLICY.minimumStorageEnergy}`;
+    }
+    if (room.find(FIND_MY_SPAWNS).length === 0) return "no spawn";
+    return null;
+  }
+
+  private debugReport(): void {
+    if (!this.debugEnabled) return;
+    const memory = ensureExpansionMemory();
+    if (!memory.enabled) {
+      this.debug("DISABLED. Set Memory.expansionManagement.enabled = true to start.");
+      return;
+    }
+    const mode = memory.dryRun ? "DRY-RUN (will not claim)" : "LIVE";
+    this.debug(
+      `mode=${mode} bucket=${Game.cpu.bucket}/${EXPANSION_POLICY.minimumCpuBucket} forced=${
+        memory.forcedRoom || "-"
+      } approved=${memory.approvedRoom || "-"} gcl=${Game.gcl.level}`
+    );
+
+    const homeNotes: string[] = [];
+    for (const room of Object.values(Game.rooms)) {
+      if (!room.controller?.my) continue;
+      const reason = this.getHomeIneligibleReason(room);
+      homeNotes.push(`${room.name}:${reason ? `no (${reason})` : "ok"}`);
+    }
+    this.debug(`homes ${homeNotes.join(", ") || "none owned"}`);
+
+    if (Game.cpu.bucket < EXPANSION_POLICY.minimumCpuBucket) {
+      this.debug("NEXT: waiting for CPU bucket to refill.");
+      return;
+    }
+    if (!this.getEligibleHomes().length) {
+      this.debug("NEXT: no eligible home room (see homes above).");
+      return;
+    }
+    if (!this.hasGclCapacity()) {
+      this.debug("NEXT: no free GCL level to claim another room.");
+      return;
+    }
+
+    const target = memory.currentTarget;
+    const assignment = target ? memory.assignments[target] : undefined;
+    if (!target || !assignment) {
+      const waiting = memory.forcedRoom || memory.approvedRoom;
+      this.debug(
+        waiting
+          ? `NEXT: no active assignment; ${waiting} is waiting to be picked up (see status messages for blockers).`
+          : "NEXT: no active assignment; set forcedRoom/approvedRoom or wait for an acceptable candidate."
+      );
+      return;
+    }
+
+    const operators = this.operationOperators.map(operator => {
+      const creep = Game.creeps[operator.name];
+      return creep
+        ? `${operator.name}@${creep.room.name}(${creep.pos.x},${creep.pos.y})`
+        : `${operator.name}[unspawned]`;
+    });
+    const targetRoom = Game.rooms[target];
+    const controller = targetRoom?.controller;
+    const vision = targetRoom
+      ? `visible controller=${
+          controller?.my ? "mine" : controller?.owner ? `owned by ${controller.owner.username}` : "neutral"
+        }${controller?.my ? ` RCL${controller.level}` : ""}`
+      : "no vision";
+    this.debug(
+      `target=${target} home=${assignment.homeRoom} phase=${assignment.phase}${assignment.forced ? " forced" : ""}${
+        assignment.reclaim ? " reclaim" : ""
+      } age=${Game.time - assignment.updatedAt} retries=${assignment.retries} ${vision}${
+        assignment.reason ? ` reason="${assignment.reason}"` : ""
+      }`
+    );
+    this.debug(`operators: ${operators.join(", ") || "none"}`);
+    this.debug(`NEXT: ${this.describeNextStep(assignment, targetRoom)}`);
+  }
+
+  private describeNextStep(assignment: ExpansionAssignment, targetRoom: Room | undefined): string {
+    const target = assignment.targetRoom;
+    switch (assignment.phase) {
+      case "scouting":
+        return `scout ${assignment.homeRoom} -> ${target} to gain vision; then claiming starts.`;
+      case "ready":
+        return ensureExpansionMemory().dryRun
+          ? "dry-run: set Memory.expansionManagement.dryRun = false to claim."
+          : "re-validating intel, then claiming.";
+      case "claiming":
+        return `spawn a claimer in ${assignment.homeRoom} and claim the ${target} controller.`;
+      case "bootstrapping": {
+        if (!targetRoom?.controller?.my) return `waiting for ${target} to become owned.`;
+        const spawns = targetRoom.find(FIND_MY_SPAWNS).length;
+        const sites = targetRoom.find(FIND_MY_CONSTRUCTION_SITES, {
+          filter: site => site.structureType === STRUCTURE_SPAWN
+        }).length;
+        return `expansion workers harvest and build/upgrade in ${target} (RCL ${targetRoom.controller.level}, spawns ${spawns}, spawn sites ${sites}); hand off at RCL ${EXPANSION_POLICY.handoffControllerLevel} with a spawn. The claim is done, so no claimer is needed.`;
+      }
+      case "active":
+        return "handed off; watching for controller loss.";
+      default:
+        return `failed: ${assignment.reason || "unknown"}.`;
+    }
+  }
+
+  private runInit(): void {
     this.operationOperators = [];
     const memory = ensureExpansionMemory();
     if (!memory.enabled) return;
+    if (memory.forcedRoom && Game.rooms[memory.forcedRoom]?.controller?.my) {
+      const forcedAssignment = memory.assignments[memory.forcedRoom];
+      if (forcedAssignment && forcedAssignment.phase !== "active") forcedAssignment.forced = true;
+      if (!forcedAssignment || forcedAssignment.phase !== "active") this.consumeApproval(memory);
+    }
     if (memory.forcedRoom) memory.approvedRoom = memory.forcedRoom;
     const homes = this.getEligibleHomes();
     const candidates = homes.length > 0 ? this.getCandidates(homes) : [];
     this.logAcceptableCandidates(candidates);
     if (Game.cpu.bucket < EXPANSION_POLICY.minimumCpuBucket) return;
+    this.detectLostRooms(homes);
+    this.reviveFailedOwnedRooms(homes);
 
     if (homes.length === 0 || !this.hasGclCapacity()) {
       this.logStatus("Waiting for an eligible home room or available GCL capacity.");
@@ -199,6 +334,77 @@ export class ExpansionManagement extends Operation {
     console.log('[ExpansionManagement] Approve one with Memory.expansionManagement.approvedRoom = "ROOM".');
   }
 
+  // A failed assignment for a room whose controller is now ours (claimed by hand, or the failure was
+  // transient) is resumed at bootstrapping so workers keep building it up and it can be handed off.
+  private reviveFailedOwnedRooms(homes: Room[]): void {
+    const memory = ensureExpansionMemory();
+    for (const assignment of Object.values(memory.assignments)) {
+      if (assignment.phase !== "failed" || !Game.rooms[assignment.targetRoom]?.controller?.my) continue;
+      if (memory.currentTarget && memory.currentTarget !== assignment.targetRoom) continue;
+      if (!homes.some(home => home.name === assignment.homeRoom) && homes.length > 0) {
+        assignment.homeRoom = homes[0].name;
+      }
+      assignment.phase = "bootstrapping";
+      assignment.forced = true;
+      assignment.retries = 0;
+      assignment.reason = "resumed: controller is owned";
+      assignment.updatedAt = Game.time;
+      memory.currentTarget = assignment.targetRoom;
+      this.logStatus(`${assignment.targetRoom} is owned; resuming its failed assignment at bootstrapping.`);
+    }
+  }
+
+  // Watches handed-off colonies. A room we no longer own (controller downgraded away) loses all
+  // structures and vision, so a long absence of owned vision is treated as a loss and re-claimed.
+  private detectLostRooms(homes: Room[]): void {
+    const memory = ensureExpansionMemory();
+    for (const assignment of Object.values(memory.assignments)) {
+      if (assignment.phase !== "active") continue;
+      const room = Game.rooms[assignment.targetRoom];
+      const controller = room?.controller;
+      if (controller?.my) {
+        assignment.lastOwnedSeen = Game.time;
+        if (
+          controller.ticksToDowngrade !== undefined &&
+          controller.ticksToDowngrade < EXPANSION_POLICY.downgradeWarningTicks
+        ) {
+          this.logStatus(
+            `${assignment.targetRoom} controller will downgrade in ${controller.ticksToDowngrade} ticks; it needs upgrading.`
+          );
+        }
+        if (memory.forcedRoom !== assignment.targetRoom) continue;
+      }
+      if (assignment.lastOwnedSeen === undefined) assignment.lastOwnedSeen = Game.time;
+
+      const visiblyLost = !!controller && !controller.my;
+      const manualReclaim = memory.forcedRoom === assignment.targetRoom && !controller?.my;
+      const absent = Game.time - assignment.lastOwnedSeen > EXPANSION_POLICY.lostRoomGraceTicks;
+      if (!visiblyLost && !manualReclaim && !absent) continue;
+      if (controller?.owner && !controller.my) {
+        this.failAssignment(assignment, `ownership lost to ${controller.owner.username}`);
+        continue;
+      }
+
+      const current = memory.currentTarget ? memory.assignments[memory.currentTarget] : undefined;
+      if (current && current.targetRoom !== assignment.targetRoom && current.phase !== "failed") continue;
+      if (homes.length === 0) continue;
+
+      if (!homes.some(home => home.name === assignment.homeRoom)) assignment.homeRoom = homes[0].name;
+      assignment.phase = "scouting";
+      assignment.forced = true;
+      assignment.reclaim = true;
+      assignment.createdAt = Game.time;
+      assignment.updatedAt = Game.time;
+      assignment.retries = 0;
+      assignment.reason = "controller lost; reclaiming";
+      memory.currentTarget = assignment.targetRoom;
+      console.log(
+        `[ExpansionManagement] ${assignment.targetRoom} appears lost; starting reclaim from ${assignment.homeRoom}.`
+      );
+      return;
+    }
+  }
+
   private getApprovalError(targetRoom: string, candidates: ExpansionCandidate[]): string | null {
     const candidate = candidates.find(entry => entry.roomName === targetRoom);
     if (!candidate) return "room is not reachable from an eligible home or is otherwise excluded";
@@ -238,15 +444,29 @@ export class ExpansionManagement extends Operation {
 
   public roleCall(): void {
     for (const operator of this.operationOperators) {
-      if (Game.creeps[operator.name] || !operator.room?.controller?.my) continue;
+      if (Game.creeps[operator.name]) continue;
+      if (!operator.room?.controller?.my) {
+        this.debug(`spawn ${operator.name}: skipped, home room is not owned/visible.`);
+        continue;
+      }
 
       const spawn = operator.room.find(FIND_MY_SPAWNS).find(candidate => !candidate.spawning);
-      if (!spawn) continue;
+      if (!spawn) {
+        this.debug(`spawn ${operator.name}: waiting, every spawn in ${operator.room.name} is busy or missing.`);
+        continue;
+      }
 
       const config = RoomHelper.getRoomConfig(operator.room);
       const spawnConfig = config?.spawns?.find(position => position.x === spawn.pos.x && position.y === spawn.pos.y);
       const directions = spawnConfig?.direction ? [spawnConfig.direction] : SPAWN_DIRECTIONS;
       const result = this.spawnOperator(operator, spawn, directions);
+      this.debug(
+        `spawn ${operator.name} at ${spawn.name}: ${result === OK ? "SPAWNING" : `result ${result}`} (energy ${
+          operator.room.energyAvailable
+        }/${operator.room.energyCapacityAvailable}, storage ${
+          operator.room.storage?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0
+        }/${EXPANSION_POLICY.minimumStorageEnergy} needed)`
+      );
       const assignment = ensureExpansionMemory().assignments[ensureExpansionMemory().currentTarget || ""];
       if (result === OK) {
         if (assignment) {
@@ -346,6 +566,12 @@ export class ExpansionManagement extends Operation {
     }
 
     if (assignment.phase === "scouting") {
+      if (targetRoom?.controller?.my) {
+        assignment.phase = "bootstrapping";
+        assignment.reason = undefined;
+        assignment.updatedAt = Game.time;
+        return;
+      }
       if (targetRoom) {
         const intel = this.captureVisibleIntel(targetRoom);
         const reason = this.evaluateIntel(intel);
@@ -402,6 +628,12 @@ export class ExpansionManagement extends Operation {
 
     if (assignment.phase === "bootstrapping") {
       const ownedRoom = Game.rooms[assignment.targetRoom];
+      if (ownedRoom?.controller && !ownedRoom.controller.my && !ownedRoom.controller.owner) {
+        assignment.phase = "claiming";
+        assignment.reason = "controller lost during bootstrap; reclaiming";
+        assignment.updatedAt = Game.time;
+        return;
+      }
       if (ownedRoom?.controller?.owner && !ownedRoom.controller.my) {
         this.failAssignment(assignment, `ownership lost to ${ownedRoom.controller.owner.username}`);
         return;
@@ -422,6 +654,8 @@ export class ExpansionManagement extends Operation {
           ownedRoom.find(FIND_MY_SPAWNS).length > 0
         ) {
           assignment.phase = "active";
+          assignment.reclaim = undefined;
+          assignment.lastOwnedSeen = Game.time;
           assignment.reason = "colony handed off to normal room operations";
           assignment.updatedAt = Game.time;
           this.logStatus(`Expansion ${assignment.targetRoom} is active; normal room operations now manage it.`);
@@ -557,11 +791,14 @@ export class ExpansionManagement extends Operation {
   }
 
   private hasGclCapacity(): boolean {
+    const memory = ensureExpansionMemory();
     const ownedRooms = new Set<string>();
     for (const room of Object.values(Game.rooms)) {
       if (room.controller?.my) ownedRooms.add(room.name);
     }
     for (const [roomName, roomMemory] of Object.entries(Memory.rooms)) {
+      const reclaiming = memory.assignments[roomName]?.reclaim && memory.assignments[roomName].phase !== "active";
+      if (reclaiming) continue;
       if (roomMemory.config?.type === "owned" && roomMemory.config.shard === Game.shard.name) {
         ownedRooms.add(roomName);
       }

@@ -219,10 +219,42 @@ export class RoomArcher extends Operator {
         return creep.pos.findClosestByPath(hostiles) || null;
     }
 
+    // Shelters on a nearby friendly rampart while enemies are close or the creep is hurt.
+    // Returns true when the creep is holding (or moving to) a rampart and normal movement should be skipped.
+    holdRampart(creep: Creep, hostiles: Creep[]): boolean {
+        const RAMPART_SEARCH_RANGE = 10;
+        const ENEMY_CLEAR_RANGE = 6;
+
+        const enemyClose = hostiles.some(h => creep.pos.getRangeTo(h) <= ENEMY_CLEAR_RANGE);
+        const needsCover = enemyClose || creep.hits < creep.hitsMax;
+        const onRampart = creep.pos.lookFor(LOOK_STRUCTURES).some(s => s.structureType === STRUCTURE_RAMPART && (s as StructureRampart).my);
+
+        if (!needsCover) return false;
+        if (onRampart) {
+            creep.say("🛡️ Hold");
+            return true;
+        }
+
+        const ramparts = creep.pos.findInRange(FIND_MY_STRUCTURES, RAMPART_SEARCH_RANGE, {
+            filter: s => s.structureType === STRUCTURE_RAMPART &&
+                !s.pos.lookFor(LOOK_CREEPS).length &&
+                !s.pos.lookFor(LOOK_STRUCTURES).some(o => o.structureType !== STRUCTURE_RAMPART && o.structureType !== STRUCTURE_ROAD && o.structureType !== STRUCTURE_CONTAINER)
+        });
+        if (!ramparts.length) return false;
+
+        const nearest = creep.pos.findClosestByPath(ramparts);
+        if (!nearest) return false;
+        creep.moveTo(nearest.pos, { maxRooms: 1, reusePath: 3 });
+        creep.say("🛡️ Cover");
+        return true;
+    }
+
     handleKiting(creep: Creep): void {
         let target: Creep | null = null;
         const hostiles = creep.room.find(FIND_HOSTILE_CREEPS);
         if (hostiles.length === 0) return;
+
+        if (this.holdRampart(creep, hostiles)) return;
 
         // Consider all enemies so archers will kite away from any hostile in the room
         const closestHostile = creep.pos.findClosestByRange(hostiles);

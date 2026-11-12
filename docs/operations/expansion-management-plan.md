@@ -163,6 +163,18 @@ Memory.expansionManagement.forcedRoom = "E33S1";
 
 A forced room acts as an approval and skips discovery filters: the three-room distance limit, registered room types, stored room configs, the failed-room cooldown, the two-source minimum, hostile creeps, keeper lairs, and the computed default-layout placement. It still must be a normal (open) room with a controller that is not owned or reserved by another player. If no layout was computed, supply an `owned` room config for the room in `src/roomconfigs` (and register it in `registry.ts`); bootstrap logs a reminder until the room has an owned config. The operation scouts the room if intel is missing or stale, then claims it and bootstraps it with the saved layout from the nearest eligible home (when one was computed). `forcedRoom` is cleared when claiming begins; remove it yourself to cancel. If the forced room is rejected, the reason is logged and no other expansion starts until you clear it. Keep `dryRun = true` to scout and validate without claiming. A stale non-owned room config left in `Memory.rooms[room].config` is replaced at bootstrap when the room has no registry entry.
 
+### Lost colonies and automatic reclaim
+
+A handed-off colony can lose its controller if nobody upgrades it. The operation watches every `active` assignment while `enabled` is true:
+
+- It logs a warning when an owned colony's controller has fewer than 10,000 ticks until downgrade.
+- If the room is visible and the controller is no longer ours, or we have had no owned vision of it for 500 ticks, the room is treated as lost. The assignment restarts as a forced reclaim: a scout confirms the controller is neutral, a claimer claims it, and bootstrap rebuilds the colony from the sponsoring home (or the first eligible home if that one is gone). The room's owned config in the registry is reused, so no layout is recomputed.
+- If another player owns the controller, the assignment fails with "ownership lost to <name>".
+- To start a reclaim manually, set `Memory.expansionManagement.forcedRoom = "ROOM"` for a room whose assignment is `active` and that we do not own.
+- The reclaim respects `dryRun` and waits for the one-claim-at-a-time slot. A room being reclaimed is not counted against GCL capacity. A colony lost during bootstrap goes back to the claiming phase.
+
+Only rooms with an expansion assignment are watched. A room claimed some other way has no assignment, so force it once (`forcedRoom`) to put it under watch.
+
 ## Follow-up decisions
 
 - Should observer scanning be coordinated with the other observer-consuming operations?

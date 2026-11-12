@@ -1,6 +1,8 @@
 import type { QuadSlot, TilePos } from "./SiegeTypes";
 import { QUAD_SLOTS } from "./SiegeTypes";
 import { chebyshev, getFootprint } from "./SiegePlanner";
+import { isKeeperRoom } from "./SiegeRouting";
+import type { TravelToOptions } from "../utils/Traveler";
 
 export interface QuadMember {
   slot: QuadSlot;
@@ -125,13 +127,17 @@ function noteHostileRooms(): Set<string> {
   return new Set(Object.keys(known));
 }
 
-function quadTravel(destinationRoom: string, range: number): TravelToOptions {
+function quadTravel(destinationRoom: string, range: number, avoidKeepers: boolean): TravelToOptions {
   const hostile = noteHostileRooms();
   return {
     range,
     allowHostile: true,
     useFindRoute: true,
-    routeCallback: (roomName: string) => (hostile.has(roomName) && roomName !== destinationRoom ? HOSTILE_ROOM_ROUTE_COST : (undefined as unknown as number))
+    routeCallback: (roomName: string) => {
+      if (avoidKeepers && isKeeperRoom(roomName)) return Infinity;
+      return hostile.has(roomName) && roomName !== destinationRoom ? HOSTILE_ROOM_ROUTE_COST : undefined;
+    },
+    roomCallback: (roomName, matrix) => (avoidKeepers && isKeeperRoom(roomName) ? false : matrix)
   };
 }
 
@@ -151,9 +157,11 @@ function permutations<T>(items: T[]): T[][] {
 
 export class QuadController {
   public readonly members: QuadMember[];
+  private readonly avoidKeepers: boolean;
 
-  public constructor(members: QuadMember[]) {
+  public constructor(members: QuadMember[], avoidKeepers = false) {
     this.members = [...members].sort((left, right) => FILE_ORDER.indexOf(left.slot) - FILE_ORDER.indexOf(right.slot));
+    this.avoidKeepers = avoidKeepers;
   }
 
   public get creeps(): Creep[] {
@@ -220,7 +228,7 @@ export class QuadController {
       if (member.creep.pos.roomName === roomName && member.creep.pos.x === tile.x && member.creep.pos.y === tile.y) {
         continue;
       }
-      member.creep.travelTo(new RoomPosition(tile.x, tile.y, roomName), quadTravel(roomName, 0));
+      member.creep.travelTo(new RoomPosition(tile.x, tile.y, roomName), quadTravel(roomName, 0, this.avoidKeepers));
     }
     return false;
   }
@@ -260,7 +268,7 @@ export class QuadController {
     for (const follower of followers) {
       if (worldRange(follower.creep.pos, ahead.pos) > 1) {
         tight = false;
-        follower.creep.travelTo(ahead.pos, quadTravel(ahead.pos.roomName, 1));
+        follower.creep.travelTo(ahead.pos, quadTravel(ahead.pos.roomName, 1, this.avoidKeepers));
       }
       ahead = follower.creep;
     }
@@ -312,7 +320,11 @@ export class QuadController {
     }
     for (const member of this.members) {
       if (member.creep.pos.roomName === rally.roomName && member.creep.pos.getRangeTo(rally) <= 2) continue;
-      member.creep.travelTo(rally, { range: 2, allowHostile: true, ignoreCreeps: false });
+      const options: TravelToOptions = this.avoidKeepers
+        ? quadTravel(rally.roomName, 2, true)
+        : { range: 2, allowHostile: true };
+      options.ignoreCreeps = false;
+      member.creep.travelTo(rally, options);
     }
     return true;
   }
@@ -367,7 +379,7 @@ export class QuadController {
       let tight = true;
       for (const follower of followers) {
         if (worldRange(follower.creep.pos, ahead.pos) > 1) {
-          follower.creep.travelTo((follower.creep.pos.roomName === ahead.pos.roomName ? ahead : leader.creep).pos, quadTravel(target.roomName, 1));
+          follower.creep.travelTo((follower.creep.pos.roomName === ahead.pos.roomName ? ahead : leader.creep).pos, quadTravel(target.roomName, 1, this.avoidKeepers));
           tight = false;
         }
         ahead = follower.creep;
@@ -392,7 +404,7 @@ export class QuadController {
 
     const leaderMoves = chainTight || isEdge(leader.creep.pos);
     if (leaderMoves) {
-      const options = quadTravel(target.roomName, range);
+      const options = quadTravel(target.roomName, range, this.avoidKeepers);
       if (!reversing) {
         options.obstacles = state.deadEnds.filter(tile => tile.until > Game.time).map(tile => ({ pos: tile.pos }));
         this.trackProgress(state, leader.creep);
@@ -408,7 +420,7 @@ export class QuadController {
           if (direction) follower.creep.move(direction);
         }
       } else {
-        follower.creep.travelTo((follower.creep.pos.roomName === ahead.pos.roomName ? ahead : leader.creep).pos, quadTravel(target.roomName, 1));
+        follower.creep.travelTo((follower.creep.pos.roomName === ahead.pos.roomName ? ahead : leader.creep).pos, quadTravel(target.roomName, 1, this.avoidKeepers));
       }
       ahead = follower.creep;
     }

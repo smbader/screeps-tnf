@@ -23,6 +23,8 @@ declare global {
         room?: string;
         working?: boolean;
         siegeId?: string;
+        squadKey?: string;
+        squadSlot?: "M1" | "M2" | "H1" | "H2";
         slot?: "A1" | "A2" | "S1" | "S2";
         waypoint?: number | null;
         operation?: string;
@@ -233,8 +235,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
   let operations = OperationHelper.getOperations()
   //try { console.log(`Instantiated ${operations.length} operations: ${operations.map(op => op.name).join(', ')}`); } catch(e) {}
 
-  /////console.log(` `);
-  /////console.log(`********  Operation Initialization  ********`);
+  //console.log(` `);
+  //console.log(`********  Operation Initialization  ********`);
   for (let operation of operations) {
     // Takes evalution of what operation and tasks are needed.
       try {
@@ -249,8 +251,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
   }
   /////console.log(`Tick CPU Usage: ${Game.cpu.getUsed()}`);
 
-  /////console.log(` `);
-  /////console.log(`********  Operation Rolecall and Spawn  ********`);
+  //console.log(` `);
+  //console.log(`********  Operation Rolecall and Spawn  ********`);
   for (let operation of operations) {
       try {
           //console.log('ROLECALL: ' + operation.name);
@@ -264,8 +266,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
   }
   /////console.log(`Tick CPU Usage: ${Game.cpu.getUsed()}`);
 
-  /////console.log(` `);
-  /////console.log(`********  Operation Action  ********`);
+  //console.log(` `);
+  //console.log(`********  Operation Action  ********`);
     let ct = 1;
   for (let operation of operations) {
       try {
@@ -313,16 +315,16 @@ export const loop = ErrorMapper.wrapLoop(() => {
         if (room.storage) {
             storageEnergy = room.storage.store.getUsedCapacity(RESOURCE_ENERGY);
         }
-        //console.log(room.name + ' (' + room.controller.level + ') ' +
-        //    'Room Counter: ' + (room.memory.nextTrade - Game.time) + ' ' +
-        //    'Storage Energy: ' + storageEnergy + ' ' +
-        //    'Terminal Energy: ' + room.memory.data.terminal.energy);
+        console.log(room.name + ' (' + room.controller.level + ') ' +
+            'Room Counter: ' + (room.memory.nextTrade - Game.time) + ' ' +
+            'Storage Energy: ' + storageEnergy + ' ' +
+            'Terminal Energy: ' + room.memory.data.terminal.energy);
     }
 
     if (Game.cpu.bucket < 9000) {
         console.log('[' + Game.shard.name + '] ' + `Tick CPU Usage: ${Game.cpu.getUsed().toFixed(2)}` + ` CPU Bucket: ` + Game.cpu.bucket);
     }
- //console.log(`^^^^^^^^    End tick     ^^^^^^^^`);
-  //console.log(`---------------------------------`);
-  //console.log(` `);
+  console.log(`^^^^^^^^    End tick     ^^^^^^^^`);
+  console.log(`---------------------------------`);
+  console.log(` `);
 });

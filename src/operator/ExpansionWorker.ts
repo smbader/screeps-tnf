@@ -1,4 +1,5 @@
 import { Operator } from "../classes/operator";
+import { RoomHelper } from "../utils/RoomHelper";
 
 export class ExpansionWorker extends Operator {
   private targetRoomName: string;
@@ -66,47 +67,54 @@ export class ExpansionWorker extends Operator {
       this.placeSpawnSite(targetRoom);
     }
 
-    const energy = creep.store.getUsedCapacity(RESOURCE_ENERGY);
-    if (energy === 0) {
+    // Harvest until full, then spend everything before harvesting again.
+    if (creep.memory.working === undefined || creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) {
+      creep.memory.working = true;
+    } else if (creep.store.getFreeCapacity() === 0) {
+      creep.memory.working = false;
+    }
+    if (creep.memory.working) {
       const source = Game.getObjectById(this.sourceId) || creep.pos.findClosestByRange(FIND_SOURCES);
       if (!source) return;
       const result = creep.harvest(source);
       if (result === ERR_NOT_IN_RANGE) creep.travelTo(source.pos);
+      else if (result === ERR_NOT_ENOUGH_RESOURCES && creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+        creep.memory.working = false;
+      }
       return;
     }
 
     const spawnSite = targetRoom.find(FIND_MY_CONSTRUCTION_SITES, {
       filter: site => site.structureType === STRUCTURE_SPAWN
     })[0];
-    if (spawnSite) {
-      const result = creep.build(spawnSite);
-      if (result === ERR_NOT_IN_RANGE) creep.travelTo(spawnSite.pos);
+    const buildTarget = spawnSite || (!spawn ? creep.pos.findClosestByRange(FIND_MY_CONSTRUCTION_SITES) : null);
+    if (buildTarget) {
+      if (creep.build(buildTarget) === ERR_NOT_IN_RANGE) creep.travelTo(buildTarget.pos, { range: 3 });
+      return;
+    }
+    if (spawn && spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+      if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.travelTo(spawn.pos);
       return;
     }
 
-    if (!spawn) {
-      const otherSite = creep.pos.findClosestByRange(FIND_MY_CONSTRUCTION_SITES);
-      if (otherSite) {
-        const result = creep.build(otherSite);
-        if (result === ERR_NOT_IN_RANGE) creep.travelTo(otherSite.pos);
-      }
-      return;
-    }
-    if (spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-      const result = creep.transfer(spawn, RESOURCE_ENERGY);
-      if (result === ERR_NOT_IN_RANGE) creep.travelTo(spawn.pos);
-      return;
-    }
-
-    if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
-      const result = creep.upgradeController(targetRoom.controller);
-      if (result === ERR_NOT_IN_RANGE) creep.travelTo(targetRoom.controller.pos);
+    // Nothing to build or fill (for example the spawn site is not placed yet): upgrade instead of idling.
+    if (creep.upgradeController(targetRoom.controller) === ERR_NOT_IN_RANGE) {
+      creep.travelTo(targetRoom.controller.pos, { range: 3 });
     }
   }
 
   private placeSpawnSite(room: Room): void {
     const controller = room.controller;
     if (!controller) return;
+
+    const configuredSpawn = RoomHelper.getRoomConfig(room)?.spawns?.[0];
+    if (configuredSpawn) {
+      const configuredResult = room.createConstructionSite(configuredSpawn.x, configuredSpawn.y, STRUCTURE_SPAWN);
+      if (configuredResult !== OK && Game.time % 100 === 0) {
+        console.log(`[ExpansionManagement] Could not place configured spawn site in ${room.name}: ${configuredResult}`);
+      }
+      if (configuredResult === OK || configuredResult === ERR_FULL) return;
+    }
 
     const sources = room.find(FIND_SOURCES);
     const minerals = room.find(FIND_MINERALS);

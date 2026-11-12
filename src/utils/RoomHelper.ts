@@ -92,6 +92,7 @@ function buildEnergySourcesForRoom(room: Room): EnergySourceConfig[] {
           }
         }
       }
+      // if the room config file has parking spots listed.
     } else {
       // fallback: create one parking spot adjacent to source
       const px = Math.max(1, Math.min(48, s.pos.x + 1));
@@ -238,6 +239,9 @@ export var RoomHelper = {
     let cfg: RoomConfig | null = null;
     if (room.memory && room.memory.config) {
       cfg = resolveTemplateConfig(room);
+    } else {
+      // Fall back to registered config if room memory config is not available
+      cfg = getRegisteredRoomConfig(room.name);
     }
 
     // Merge memory values first, then overlay the resolved config so config keys overwrite runtime memory values

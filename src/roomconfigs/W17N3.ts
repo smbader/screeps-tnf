@@ -1,5 +1,6 @@
 import type { RoomConfig } from "./RoomConfig";
-export class W29N7 {
+
+export class W17N3 {
 
     public static getConfig(): RoomConfig {
         return {
@@ -7,17 +8,16 @@ export class W29N7 {
             "type": "remote",
             "energysources": [
                 {
-                    "id": "55db3106efa8e3fe66e04754",
-                    "pos": {"x": 26, "y": 25},
-                    "tinyfarmers": 4,
+                    "id": "55c34a6b5be41a0a6e80c3cc",
+                    "pos": {"x": 42, "y": 10},
+                    "tinyfarmers": 10,
                 },
                 {
-                    "id": "55db3106efa8e3fe66e04752",
-                    "pos": {"x": 45, "y": 8},
-                    "tinyfarmers": 3,
+                    "id": "55c34a6b5be41a0a6e80c3cd",
+                    "pos": {"x": 32, "y": 29},
+                    "tinyfarmers": 10,
                 },
             ],
         }
     }
 }
-

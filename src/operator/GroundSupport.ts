@@ -14,7 +14,7 @@ import {
 import { RoomHelper } from "../utils/RoomHelper";
 
 // Set to true to print GroundSupport activity to the console.
-const GROUND_SUPPORT_DEBUG = false;
+const GROUND_SUPPORT_DEBUG = true;
 
 function debugLog(message: string): void {
   if (GROUND_SUPPORT_DEBUG) console.log(message);
@@ -1371,15 +1371,21 @@ export class GroundSupport extends Operator {
     const inputB = Game.getObjectById(state.inputLabIds[1]);
     if (!inputA || !inputB) return;
 
+    debugLog(`[${this.room.name}] GroundSupport stock check - available: ${JSON.stringify(stock.available)}`);
+
     const loadedRecipe = getLoadedLabReaction(
       inputA.mineralType || null,
       inputB.mineralType || null,
       inputA.store.getUsedCapacity(inputA.mineralType || RESOURCE_ENERGY) || 0,
       inputB.store.getUsedCapacity(inputB.mineralType || RESOURCE_ENERGY) || 0
     );
+    debugLog(`[${this.room.name}] GroundSupport inputA has ${inputA.mineralType || 'EMPTY'} (${inputA.store.getUsedCapacity(inputA.mineralType || RESOURCE_ENERGY) || 0}), inputB has ${inputB.mineralType || 'EMPTY'} (${inputB.store.getUsedCapacity(inputB.mineralType || RESOURCE_ENERGY) || 0}), loadedRecipe=${loadedRecipe?.product || 'null'}`);
+    
     const plan = loadedRecipe
       ? { recipe: loadedRecipe }
       : selectLabReactionPlan(stock.available, REACTIONS, LAB_COMPOUND_TARGET, stock.product);
+    debugLog(`[${this.room.name}] GroundSupport plan selection: recipe=${plan?.recipe?.product || 'null'}, missingBase=${plan?.missingBase || 'none'}`);
+    
     if (!plan) {
       state.activeProduct = undefined;
       state.activeReagents = undefined;
@@ -1393,6 +1399,24 @@ export class GroundSupport extends Operator {
       return;
     }
     if (!plan.recipe) return;
+
+    // Verify we can actually obtain enough of the reagents to supply the input labs
+    // Check if we have enough in storage/terminal (not counting what's stuck in labs)
+    const storageStockA = (this.room.storage?.store.getUsedCapacity(plan.recipe.reagentA) || 0) +
+                          (this.room.terminal?.store.getUsedCapacity(plan.recipe.reagentA) || 0);
+    const storageStockB = (this.room.storage?.store.getUsedCapacity(plan.recipe.reagentB) || 0) +
+                          (this.room.terminal?.store.getUsedCapacity(plan.recipe.reagentB) || 0);
+    const minSupplimentAmount = LAB_INPUT_BUFFER; // Try to fill each to 1000
+    
+    debugLog(`[${this.room.name}] GroundSupport supply check - storageA(${plan.recipe.reagentA})=${storageStockA}, storageB(${plan.recipe.reagentB})=${storageStockB}, need=${minSupplimentAmount}`);
+    
+    if (storageStockA < minSupplimentAmount && storageStockB < minSupplimentAmount) {
+      // Not enough of either in accessible storage - skip this reaction
+      state.activeProduct = undefined;
+      state.activeReagents = undefined;
+      this.logLabProductionStatus(state, `skipped: insufficient accessible ${plan.recipe.reagentA} (${storageStockA}) and ${plan.recipe.reagentB} (${storageStockB})`);
+      return;
+    }
 
     state.activeProduct = plan.recipe.product;
     state.activeReagents = [plan.recipe.reagentA, plan.recipe.reagentB];
@@ -1514,6 +1538,8 @@ export class GroundSupport extends Operator {
     const stores: { store: StoreDefinition; id?: string }[] = [];
     if (this.room.storage) stores.push({ store: this.room.storage.store });
     if (this.room.terminal) stores.push({ store: this.room.terminal.store });
+    // Goods in the creep's hands still count, otherwise the plan flips while it carries the last of a reagent.
+    if (this.creep) stores.push({ store: this.creep.store });
     for (const lab of this.room.find<StructureLab>(FIND_MY_STRUCTURES, {
       filter: structure => structure.structureType === STRUCTURE_LAB
     })) {
@@ -1544,23 +1570,55 @@ export class GroundSupport extends Operator {
     const inputLabs = state.inputLabIds.map(id => Game.getObjectById(id));
     const productLabs = (labsMemory.products || []).map(entry => Game.getObjectById(entry.id));
 
+    debugLog(`[${this.room.name}] GroundSupport need check - active product: ${state.activeProduct}, reagents: ${reagentA}/${reagentB}`);
+
     for (const lab of productLabs) {
       if (!lab) continue;
       const usedEnergy = lab.store.getUsedCapacity(RESOURCE_ENERGY) || 0;
       if (usedEnergy >= LAB_PRODUCT_ENERGY_BUFFER) continue;
       const availableEnergy =
         (this.room.storage?.store.getUsedCapacity(RESOURCE_ENERGY) || 0) +
-        (this.room.terminal?.store.getUsedCapacity(RESOURCE_ENERGY) || 0);
+        (this.room.terminal?.store.getUsedCapacity(RESOURCE_ENERGY) || 0) +
+        (this.creep?.store.getUsedCapacity(RESOURCE_ENERGY) || 0);
       const amount = Math.min(LAB_PRODUCT_ENERGY_BUFFER - usedEnergy, availableEnergy);
-      if (amount > 0) return { lab, resource: RESOURCE_ENERGY, amount };
+      if (amount > 0) {
+        debugLog(`[${this.room.name}] GroundSupport need: fill output lab energy (need ${amount})`);
+        return { lab, resource: RESOURCE_ENERGY, amount };
+      }
     }
 
     const inputsHaveLoadedRecipe =
       inputLabs[0]?.mineralType === state.activeReagents[0] &&
       inputLabs[1]?.mineralType === state.activeReagents[1] &&
-      (inputLabs[0].store.getUsedCapacity(state.activeReagents[0]) || 0) > 0 &&
-      (inputLabs[1].store.getUsedCapacity(state.activeReagents[1]) || 0) > 0;
+      (inputLabs[0].store.getUsedCapacity(state.activeReagents[0]) || 0) >= LAB_REACTION_MINERAL_AMOUNT &&
+      (inputLabs[1].store.getUsedCapacity(state.activeReagents[1]) || 0) >= LAB_REACTION_MINERAL_AMOUNT;
+    debugLog(`[${this.room.name}] GroundSupport inputsHaveLoadedRecipe=${inputsHaveLoadedRecipe}, inputA=${inputLabs[0]?.mineralType}(${inputLabs[0]?.store.getUsedCapacity(inputLabs[0]?.mineralType || RESOURCE_ENERGY) || 0}), inputB=${inputLabs[1]?.mineralType}(${inputLabs[1]?.store.getUsedCapacity(inputLabs[1]?.mineralType || RESOURCE_ENERGY) || 0})`);
+    
     if (inputsHaveLoadedRecipe) return null;
+
+    // Check if we're stuck trying to supply input labs
+    // If we can't get enough of either reagent to fill the input lab to the buffer level,
+    // we should clear the reaction and try something else
+    for (let index = 0; index < inputLabs.length; index++) {
+      const lab = inputLabs[index];
+      const resource = state.activeReagents[index];
+      if (!lab) continue;
+      const used = lab.store.getUsedCapacity(resource) || 0;
+      if (used >= LAB_INPUT_BUFFER) continue; // Lab is full, we're good
+      const available = this.getResourceStockpile(resource, lab.id);
+      debugLog(`[${this.room.name}] GroundSupport input lab check - need ${resource}: used=${used}, available=${available}, labMineral=${lab.mineralType}`);
+      // If there's not enough available to fill the lab and it has a different mineral, we're stuck
+      if (available + used < LAB_INPUT_BUFFER && lab.mineralType && lab.mineralType !== resource) {
+        const labsMemory = this.room.memory.data?.labs;
+        if (labsMemory?.production) {
+          labsMemory.production.activeProduct = undefined;
+          labsMemory.production.activeReagents = undefined;
+          this.logLabProductionStatus(labsMemory.production, `stuck: can't supply enough ${resource} to lab (need ${LAB_INPUT_BUFFER - used}, have ${available})`);
+        }
+        debugLog(`[${this.room.name}] GroundSupport STUCK: clearing ${lab.mineralType} from input lab`);
+        return { lab, resource: lab.mineralType, amount: lab.store.getUsedCapacity(lab.mineralType) || 0, clear: true };
+      }
+    }
 
     const labTargets: { lab: StructureLab | null; resource: ResourceConstant }[] = [
       ...(inputsHaveLoadedRecipe
@@ -1574,7 +1632,10 @@ export class GroundSupport extends Operator {
     for (const target of labTargets) {
       if (target.lab?.mineralType && target.lab.mineralType !== target.resource) {
         const amount = target.lab.store.getUsedCapacity(target.lab.mineralType) || 0;
-        if (amount > 0) return { lab: target.lab, resource: target.lab.mineralType, amount, clear: true };
+        if (amount > 0) {
+          debugLog(`[${this.room.name}] GroundSupport need: clear mismatched mineral ${target.lab.mineralType} (${amount})`);
+          return { lab: target.lab, resource: target.lab.mineralType, amount, clear: true };
+        }
       }
     }
     if (inputsHaveLoadedRecipe) return null;
@@ -1587,9 +1648,13 @@ export class GroundSupport extends Operator {
       if (used >= LAB_INPUT_BUFFER) continue;
       const available = this.getResourceStockpile(resource, lab.id);
       const amount = Math.min(LAB_INPUT_BUFFER - used, available);
-      if (amount > 0) return { lab, resource, amount };
+      if (amount > 0) {
+        debugLog(`[${this.room.name}] GroundSupport need: supply ${resource} to input lab (need ${amount})`);
+        return { lab, resource, amount };
+      }
     }
 
+    debugLog(`[${this.room.name}] GroundSupport no needs found`);
     return null;
   }
 
@@ -1677,7 +1742,8 @@ export class GroundSupport extends Operator {
   private getResourceStockpile(resource: ResourceConstant, excludeLabId?: Id<StructureLab>): number {
     let total =
       (this.room.storage?.store.getUsedCapacity(resource) || 0) +
-      (this.room.terminal?.store.getUsedCapacity(resource) || 0);
+      (this.room.terminal?.store.getUsedCapacity(resource) || 0) +
+      (this.creep?.store.getUsedCapacity(resource) || 0);
     for (const lab of this.room.find<StructureLab>(FIND_MY_STRUCTURES, {
       filter: structure => structure.structureType === STRUCTURE_LAB && structure.id !== excludeLabId
     })) {

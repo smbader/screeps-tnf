@@ -25,6 +25,8 @@ export interface ExpansionAssignment {
   retries: number;
   reason?: string;
   forced?: boolean;
+  reclaim?: boolean;
+  lastOwnedSeen?: number;
 }
 
 export interface ExpansionManagementMemory {
@@ -34,6 +36,8 @@ export interface ExpansionManagementMemory {
   currentTarget?: string;
   approvedRoom?: string;
   forcedRoom?: string;
+  /** Overrides EXPANSION_DEBUG at runtime: true/false. */
+  debug?: boolean;
   assignments: Record<string, ExpansionAssignment>;
   intel: Record<string, ExpansionRoomIntel>;
   lastStatusLog?: number;
@@ -68,6 +72,8 @@ export const EXPANSION_POLICY = {
   minimumSources: 2,
   workersPerSource: 1,
   handoffControllerLevel: 2,
+  lostRoomGraceTicks: 500,
+  downgradeWarningTicks: 10000,
   statusLogInterval: 100
 };
 

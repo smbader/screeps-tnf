@@ -106,7 +106,7 @@ export class EnergyManagement extends Operation {
                 }
             }
 
-            if (room.controller.level == 4 && room.storage && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000) {
+            if (room.controller.level == 4 && room.storage && room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 40000) {
                 let haulerName = 'Hauler_' + room.name + '_controller';
                 operator = new Hauler(haulerName, room, room.storage.id, false, true);
                 this.operationOperators.push(operator);
@@ -163,7 +163,12 @@ export class EnergyManagement extends Operation {
                         if (!spawn.spawning) {
                             if (operationOperator instanceof Harvester) {
 
-                                let workParts = Math.max(1, Math.min(6, Math.floor((operationOperator.room.energyCapacityAvailable - 100) / 150)));
+                                //1250
+                                let workParts = Math.max(1, Math.min(6, Math.floor((operationOperator.room.energyCapacityAvailable - 300) / 150)));
+                                if (controllerLevel == 4 && operationOperator.room.energyCapacityAvailable < 950) {
+                                    workParts = Math.max(1, Math.min(6, Math.floor((operationOperator.room.energyCapacityAvailable % 0.75) / 150)));
+                                }
+                                console.log(`    Work Parts: ` + workParts);
                                 let operatorParts:BodyPartConstant[] = [];
                                 for (let i = 1; i <= workParts;  i++) {
                                     operatorParts.push(WORK);

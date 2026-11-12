@@ -13,12 +13,10 @@ export class RemoteFarming extends Operation {
 
     operationOperators:Operator[];
     expansionRooms:any[] = [
-        //{ target: 'E31N2', source: 'E31N1', 'shard': 'shard1' },
-        { target: 'E33N2', source: 'E32N2', 'shard': 'shard1' },
-        { target: 'E33N3', source: 'E32N2', 'shard': 'shard1' },
-        { target: 'E33N4', source: 'E32N4', 'shard': 'shard1' },
-        //{ target: 'E32N3', source: 'E31N3', 'shard': 'shard1' },
-        { target: 'E31N4', source: 'E31N3', 'shard': 'shard1' },
+        { target: 'W17N3', source: 'W17N4', 'shard': 'shard0' },
+        { target: 'W18N4', source: 'W17N4', 'shard': 'shard0' },
+        //{ target: 'E33N4', source: 'W17N4', 'shard': 'shard0' },
+        //{ target: 'E31N4', source: 'W17N4', 'shard': 'shard0' },
     ];
 
     constructor() {

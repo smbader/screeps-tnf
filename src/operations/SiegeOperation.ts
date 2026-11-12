@@ -1,5 +1,7 @@
 import { Operation } from "../classes/operation";
 import { QuadController, QuadMember, FileAdvanceResult } from "./QuadController";
+import { SmallSiege } from "./SmallSiege";
+import { SoloSiege } from "./SoloSiege";
 import { attackWithMembers, chooseCreepFocus, findStructureAt, healMembers, isArmed } from "./SiegeCombat";
 import {
   QUAD_BODIES,
@@ -94,13 +96,18 @@ function sameTile(a: TilePos | undefined, b: TilePos | undefined): boolean {
 }
 
 export class SiegeOperation extends Operation {
+  private readonly smallSiege = new SmallSiege();
+  private readonly soloSiege = new SoloSiege();
+
   public init(): void {
     if (!SIEGE_POLICY.enabled) return;
     for (const options of SIEGE_POLICY.targets) {
       if (options.enabled === false) continue;
       const memory = this.getMemory(options);
       try {
-        this.update(memory);
+        if (options.mode === "solo") this.soloSiege.update(memory, options);
+        else if (options.mode === "rcl4") this.smallSiege.update(memory, options);
+        else this.update(memory);
       } catch (error) {
         console.log(`[Siege ${memory.id}] update error: ${error}`);
       }
@@ -111,7 +118,10 @@ export class SiegeOperation extends Operation {
     if (!SIEGE_POLICY.enabled) return;
     for (const memory of this.activeSieges()) {
       try {
-        if (memory.phase === "PREPARING" || memory.phase === "ASSEMBLING") this.supplyQuad(memory);
+        const options = SIEGE_POLICY.targets.find(target => target.id === memory.id);
+        if (options?.mode === "solo") this.soloSiege.supply(memory, options);
+        else if (options?.mode === "rcl4") this.smallSiege.supply(memory, options);
+        else if (memory.phase === "PREPARING" || memory.phase === "ASSEMBLING") this.supplyQuad(memory);
       } catch (error) {
         console.log(`[Siege ${memory.id}] spawn error: ${error}`);
       }
@@ -122,7 +132,10 @@ export class SiegeOperation extends Operation {
     if (!SIEGE_POLICY.enabled) return;
     for (const memory of this.activeSieges()) {
       try {
-        this.control(memory);
+        const options = SIEGE_POLICY.targets.find(target => target.id === memory.id);
+        if (options?.mode === "solo") this.soloSiege.control(memory, options);
+        else if (options?.mode === "rcl4") this.smallSiege.control(memory, options);
+        else this.control(memory);
         this.report(memory);
       } catch (error) {
         console.log(`[Siege ${memory.id}] control error: ${error}`);
@@ -1266,6 +1279,12 @@ export class SiegeOperation extends Operation {
 
   private report(memory: SiegeMemory): void {
     if (!SIEGE_POLICY.debug || Game.time % 10 !== 0) return;
+    if (SIEGE_POLICY.targets.find(target => target.id === memory.id)?.mode === "solo") {
+      const name = memory.solo?.name;
+      const creep = name ? Game.creeps[name] : undefined;
+      console.log(`[Siege ${memory.id}] ${memory.targetRoom} phase=${memory.phase} solo=${creep ? creep.name : "none"} ${memory.status || ""}`);
+      return;
+    }
     const alive = this.aliveCount(memory);
     console.log(
       `[Siege ${memory.id}] ${memory.targetRoom} phase=${memory.phase} members=${alive}/4 attempt=${memory.attempt}` +

@@ -15,6 +15,7 @@ import { RemoteKeeper } from "../operations/RemoteKeeper";
 import { PowerHarvestOperation } from "../operations/PowerHarvestOperation";
 import { LabProcesses } from "../operations/LabProcesses";
 import { SiegeOperation } from "../operations/SiegeOperation";
+import { SquadDefense } from "../operations/SquadDefense";
 import { ControllerAttacker } from "../operations/ControllerAttacker";
 import { SiloDefense } from "../operations/SiloDefense";
 
@@ -24,6 +25,7 @@ type Type_Operation_Classes = {
 
 const OPERATION_CLASSES: Type_Operation_Classes = {
     siege: SiegeOperation,                      // runs before depositfarmer so it claims observers first
+    squaddefense: SquadDefense,
     market: Market,                             // 5
     remoteattack: RemoteAttack,
     //powerharvestoperation: PowerHarvestOperation,                 // 6

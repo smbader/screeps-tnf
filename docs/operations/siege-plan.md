@@ -248,3 +248,102 @@ Notes and known limits:
 ## Remaining open questions
 
 None. The plan is ready for implementation approval.
+
+## RCL 4 siege mode
+
+The `rcl4` target mode in `SIEGE_POLICY.targets` is separate from the boosted
+siege described above. It uses the configured `homeRoom`, sends a scout for
+initial intelligence, and spawns four unboosted 1,300-energy
+members sequentially. A member has 5 MOVE, 2 RANGED_ATTACK, and 3 HEAL parts.
+With all MOVE parts intact, this body travels one tile per tick on plains and
+one tile per five ticks on swamps. Compared with the previous body, it retains
+the same healing and damage but has 1,000 rather than 1,400 hit points.
+Existing creeps retain their old bodies; replacements use the new composition,
+so a mixed quad still travels at the pace of its slowest member.
+
+The quad can spawn and travel toward the target before the scout arrives;
+if necessary it enters without scouting, which risks encountering unseen defenses.
+Scouting selects a keeper-free entry and a low-exposure staging position,
+and the last snapshot remains usable after vision is lost or the snapshot ages.
+The quad checks for a survivable route to a spawn first, then a tower; if
+neither is safe it drains the tower while healing. Live observations replace
+cached intel when available. It abandons an assault route if updated
+exposure exceeds its healing budget, pauses for known safe mode, and completes
+only when live vision confirms that the hostile spawns are gone. A blocked
+entry is retried. Keeper rooms are avoided for both scouts and quad travel,
+including pathfinder fallbacks.
+
+Unlike the boosted mode, this mode has **no wave limit**: lost members are
+replaced until the siege is disabled or succeeds. To stop it, set that target's
+`enabled` field to `false` or remove the target. It can consume energy
+indefinitely if the tower is refilled or the route is impassable; an unboosted
+quad cannot sustainably heal even the minimum 150 damage per tick from one
+active tower (its maximum is 144). This is an expendable draining strategy,
+not a guarantee of victory, and the scout and quad can be killed before
+reaching the drain position. Check `[Siege ...]` status logs for its progress.
+
+## Solo tower-draining mode
+
+Set a target's `mode` to `"solo"` and provide `homeRoom` in
+`SIEGE_POLICY.targets` to use one attacker instead of a quad. For example:
+
+```ts
+{ id: "W18N7-solo", targetRoom: "W18N7", homeRoom: "W17N4", mode: "solo" }
+```
+
+Use a distinct ID when changing modes, and disable the old target to avoid
+running both operations. The existing target remains in quad mode unless
+explicitly changed.
+
+The solo attacker costs 1,300 energy and has 2 RANGED_ATTACK, 3 HEAL, and
+5 MOVE parts, in that order to protect mobility. It chooses an accessible
+non-keeper entrance with plain escape tiles, using cached tower locations when
+available. It does not require a separate scout or target vision to travel.
+It moves off the staging-room border toward the interior and engages nearby
+hostile creeps during transit. Against active melee attackers it fires while
+moving away when closer than range 3, or holds at range 3. It considers all
+nearby melee attackers and avoids blocked tiles and room edges; if no step
+increases separation, it holds and fires. Safe-mode and tower-damage retreats
+normally take priority, and a melee threat in a target room with active or
+unknown towers triggers retreat rather than kiting deeper into tower fire.
+At the entrance it steps one tile inside; if no attack is observed, it waits
+there to draw tower fire. On an attack or observed damage it exits and heals
+fully before probing again. Once live vision shows all hostile towers have
+less than 10 energy or are gone, it advances toward the spawn. It pauses for
+known safe mode and replaces lost attackers until disabled or victory is
+confirmed by live vision. If it loses all healing parts, it returns home to
+be recycled and replaced.
+
+When a visible hostile spawn is within range 8 and a tower is active, the solo
+can make an earlier opportunity attack. It plans a route into firing range and
+back to its selected entry, and estimates worst-position tower damage over the
+trip, self-healing, body-part damage, movement fatigue and remaining lifetime.
+It only advances if the estimate leaves more than 100 hits after the return.
+It reevaluates every tick and retreats when the margin is lost, an armed
+defender appears, or it loses its ranged parts. It will not start the attack
+with an armed defender present, a blocked path, or tower effects it cannot
+estimate. It continues to withdraw after destroying the last spawn before
+marking the siege complete. The estimate assumes current conditions and is
+not a guarantee: newly spawned defenders, blocked paths, tower effects, or
+damage exceeding the prediction can still prevent escape.
+
+With 200 ticks of life or less and an active ranged part, the solo instead
+starts a last stand: it enters even if damaged or towers are active, heads
+for a reachable hostile spawn, and fires on it when in range. It fires at a
+nearby hostile structure while approaching, or falls back to another reachable
+hostile structure if no spawn can be reached. A rampart covering the target
+is attacked first. It still heals itself and respects safe mode, but no
+longer retreats or kites during this rush. Normal victory detection still
+ends the operation once live vision confirms that no hostile spawns remain.
+
+This is not guaranteed to drain a tower or keep the attacker alive: defenders
+can refill towers, attack at the border, block an exit, or activate safe mode.
+It can spend energy indefinitely. If no opportunity attack meets the escape
+budget and a tower never fires, it waits until the last stand.
+
+The solo controller prints a `[Siege ...] combat` console line every tick
+while in the target room or near a hostile, and on observed attacks or damage.
+It includes position, health, fatigue, active parts, nearby hostile ranges and
+combat parts, tower energy from the current snapshot, heal and attack results,
+the movement decision, and movement return code when a move is attempted.
+These diagnostics are always enabled and can produce frequent console output.

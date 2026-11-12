@@ -27,7 +27,7 @@ export interface TravelToOptions {
     range?: number;
     obstacles?: {pos: RoomPosition}[];
     roomCallback?: (roomName: string, matrix: CostMatrix) => CostMatrix | boolean;
-    routeCallback?: (roomName: string) => number;
+    routeCallback?: (roomName: string) => number | undefined;
     returnData?: { nextPos: RoomPosition; };
     restrictDistance?: number;
     useFindRoute?: boolean;
@@ -434,4 +434,3 @@ export class Traveler {
 // global.traveler = new Traveler();
 
 // uncomment this block to assign a function to Creep.prototype: creep.travelTo(destination)
-

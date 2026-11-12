@@ -34,6 +34,8 @@ export interface SiegeOptions {
   id: string;
   targetRoom: string;
   enabled?: boolean;
+  mode?: "rcl4" | "solo";
+  homeRoom?: string;
 }
 
 export interface SiegePolicy {
@@ -64,7 +66,7 @@ export interface SiegePolicy {
 export const SIEGE_POLICY: SiegePolicy = {
   enabled: true,
   debug: true,
-  targets: [],
+  targets: [{ id: "W18N7-solo", targetRoom: "W18N7", homeRoom: "W17N4", mode: "solo" }],
   minimumCpuBucket: 3000,
   observerRange: 10,
   scanInterval: 25,
@@ -216,6 +218,27 @@ export interface SiegeMemory {
   lastPurchaseTick?: number;
   blockedReason?: string;
   status?: string;
+  scoutName?: string;
+  lastScoutSpawnTick?: number;
+  drainAnchor?: TilePos;
+  smallSiegeEntry?: { roomName: string; pos: TilePos };
+  smallSiegeEntryReady?: boolean;
+  smallSiegeUnscoutedReady?: boolean;
+  assaultPlan?: SiegePlan;
+  solo?: {
+    name?: string;
+    entry?: {
+      roomName: string;
+      outside: TilePos;
+      inside: TilePos;
+      inward: DirectionConstant;
+      outward: DirectionConstant;
+    };
+    retreating?: boolean;
+    opportunity?: "attacking" | "retreating";
+    lastHits?: number;
+    lastRoom?: string;
+  };
 }
 
 export interface SiegeRootMemory {

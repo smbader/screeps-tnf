@@ -51,7 +51,8 @@ export class TinyFarmer extends Operator {
 
             if (this.creep.ticksToLive && this.creep.ticksToLive < 1400 &&
                 this.creep.pos.roomName == this.room.name &&
-                this.creep.store.getUsedCapacity() == 0 && this.room.energyAvailable >= 300) {
+                this.creep.store.getUsedCapacity() == 0 && this.room.energyAvailable >= 1000
+                && !this.room.storage) {
 
                 // Renew yourself.
                 let spawn = this.creep.pos.findClosestByPath(FIND_MY_SPAWNS, {
@@ -173,8 +174,11 @@ export class TinyFarmer extends Operator {
                     let spawnConstruction = this.room.controller.pos.findClosestByRange(FIND_CONSTRUCTION_SITES);
 
                     if (spawnConstruction) {
-                        if (this.creep.build(spawnConstruction) == ERR_NOT_IN_RANGE) {
+                        let result = this.creep.build(spawnConstruction);
+                        if (result == ERR_NOT_IN_RANGE) {
                             this.creep.travelTo(spawnConstruction.pos);
+                            return;
+                        } else if (result == OK) {
                             return;
                         }
                     }
@@ -182,7 +186,7 @@ export class TinyFarmer extends Operator {
 
 
                 let target = this.creep.pos.findClosestByPath<StructureContainer>(FIND_STRUCTURES, {
-                    filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE)
+                    filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE || structure.structureType == STRUCTURE_SPAWN)
                 });
 
                 if (target) {

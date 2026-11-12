@@ -157,6 +157,17 @@ export class Field extends Operator {
             if (matching.length > 0) {
                 target = creep.pos.findClosestByPath(matching) || creep.pos.findClosestByRange(matching);
             }
+            if (!target) {
+                // find the closest spawn structure needing energy 
+                const spawns = this.room.find(FIND_STRUCTURES, {
+                    filter: (structure) => {
+                        return (
+                            structure.structureType === STRUCTURE_SPAWN
+                        ) && (structure as AnyStoreStructure).store?.getFreeCapacity(RESOURCE_ENERGY) > 0;
+                    }
+                });
+                target = creep.pos.findClosestByPath(spawns) || creep.pos.findClosestByRange(spawns);
+            }
             // choose closest matching structure
             let foundTarget = !!target;
             if (target) {
