@@ -187,7 +187,8 @@ export class TinyFarmer extends Operator {
 
 
                 let target = this.creep.pos.findClosestByPath<StructureContainer>(FIND_STRUCTURES, {
-                    filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE)
+                    filter: structure => ((structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE) &&
+                    structure.isActive())
                 });
 
                 if (target) {
@@ -211,10 +212,10 @@ export class TinyFarmer extends Operator {
                 for(const resourceType in this.creep.store) {
                     actionresult = this.creep.transfer(target, <"energy" | "power" | "ops" | "U" | "L" | "K" | "Z" | "O" | "H" | "X" | "OH" | "ZK" | "UL" | "G" | "UH" | "UO" | "KH" | "KO" | "LH" | "LO" | "ZH" | "ZO" | "GH" | "GO" | "UH2O" | "UHO2" | "KH2O" | "KHO2" | "LH2O" | "LHO2" | "ZH2O" | "ZHO2" | "GH2O" | "GHO2" | "XUH2O" | "XUHO2" | "XKH2O" | "XKHO2" | "XLH2O" | "XLHO2" | "XZH2O" | "XZHO2" | "XGH2O" | "XGHO2" | "mist" | "biomass" | "metal" | "silicon" | "utrium_bar" | "lemergium_bar" | "zynthium_bar" | "keanium_bar" | "ghodium_melt" | "oxidant" | "reductant" | "purifier" | "battery" | "composite" | "crystal" | "liquid" | "wire" | "switch" | "transistor" | "microchip" | "circuit" | "device" | "cell" | "phlegm" | "tissue" | "muscle" | "organoid" | "organism" | "alloy" | "tube" | "fixtures" | "frame" | "hydraulics" | "machine" | "condensate" | "concentrate" | "extract" | "spirit" | "emanation" | "essence">resourceType);
                 }
-
+this.creep.say('A: ' + actionresult);
                 if (actionresult == ERR_NOT_IN_RANGE) {
                     this.creep.travelTo(target.pos);
-                } else if (actionresult == ERR_FULL) {
+                } else if (actionresult == ERR_FULL || actionresult == ERR_INVALID_TARGET) {
                     this.creep.memory.target = null;
                 } else if (this.creep.store.getUsedCapacity() == 0) {
                     this.creep.memory.target = null;

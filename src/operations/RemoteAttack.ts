@@ -30,10 +30,10 @@ class RemoteAttack extends Operation {
     ];
 
     attackRooms:any[] = [
-        { target: 'E33N2', source: 'E32N2', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
-        { target: 'E33N3', source: 'E32N2', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
-        { target: 'E33N4', source: 'E32N4', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
-        { target: 'E31N4', source: 'E31N3', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        //{ target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        //{ target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         //{ target: "E31N2", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
         //{ target: "E33S0", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
         //{ target: "E33S1", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },
