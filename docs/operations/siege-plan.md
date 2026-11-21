@@ -249,6 +249,98 @@ Notes and known limits:
 
 None. The plan is ready for implementation approval.
 
+## Persistent siege diagnostics
+
+All siege modes now record diagnostics in **`Memory.siegeLogs`**, separately
+from operational state in `Memory.sieges`. Recording is enabled by
+`SIEGE_POLICY.diagnostics.enabled` and does not depend on console debug logging.
+Logs survive ticks and code reloads. A reload starts a new `session` record;
+it does not erase the existing history.
+
+The shared rolling log is limited to **250,000 serialized characters** and
+**2,000 records** across all sieges. Oldest records are removed automatically.
+`droppedRecords` reports evictions and omitted oversized payloads; a
+`record-too-large` entry explicitly identifies a payload that could not fit.
+This limits diagnostic Memory, not the bot's total Memory usage. The budget
+and sampling intervals are configurable in `SIEGE_POLICY.diagnostics`;
+the minimum supported character budget is 1,024.
+
+### What is recorded
+
+- Configuration at startup, phase/status changes, attempts, waves, retreat
+  reasons, blocked reasons, completion, and exceptions.
+- Planned routes, breach tiles, gather/drain positions, selected entrances,
+  solo entry positions, and boost choices, including plan removal/replacement.
+- Spawn attempts and return codes; member bodies on discovery and boost changes;
+  disappearance with last-observed health and lifetime. Disappearance alone
+  is **not** labeled a confirmed kill.
+- Per-member positions, health, fatigue, lifetime, active parts, movement
+  destinations/directions, heal/attack targets, and action return codes.
+- Visible room layouts, including roads, public ramparts, structures and
+  their hits, tower energy/effects, hostile bodies, ownership, and safe mode.
+  Layouts are refreshed on first visibility, phase changes, and every
+  25 ticks. Large snapshots are paged by `snapshotTick`, `page`, and `pages`;
+  rolling eviction can remove older pages.
+- Relevant room event-log results, including attacks involving siege members
+  and destroyed objects in the target room.
+
+Quiet member frames are sampled every five ticks. State changes, observed
+health changes, failed action codes, and relevant room events bypass sampling.
+Frames include `omittedQuietTicks`, so gaps are explicit. Console text is not
+intercepted; diagnostics are structured records rather than copies of every
+console line. Finished/aborted operations do not continually overwrite their
+postmortem logs with empty frames.
+
+**Timing matters:** an action with `result: 0` means Screeps accepted an
+intent, not that it resolved successfully. Frame positions/hits are current
+observations; room events explicitly carry the **previous tick's** number.
+Use subsequent observations and events to evaluate actual movement, damage,
+healing, and destruction.
+
+### Screeps console / CLI commands
+
+These are JavaScript commands for the Screeps console, including a CLI
+connected to that console:
+
+```js
+siegeLog.status()
+console.log(siegeLog.export("W18N7-probe"))
+```
+
+The export is JSON containing retained records, configuration, current siege
+state, and 50-row terrain maps. Save that JSON and provide it for analysis.
+Omit the ID to export all sieges: `siegeLog.export()`.
+
+For logs too large for a single console response, freeze a paged export:
+
+```js
+siegeLog.startExport("W18N7-probe")
+siegeLog.chunk(0)
+siegeLog.chunk(1)
+// Continue through the manifest's parts - 1.
+```
+
+Each chunk is valid JSON with an `exportId`, zero-based `index`, `parts`, and
+`text`. Provide all chunks from the same export, or sort them by index and
+concatenate their decoded `text` fields to reconstruct the original JSON.
+The frozen copy is held in runtime heap, **not duplicated in Memory**;
+ongoing logging cannot change it. Starting another export, clearing logs,
+or a runtime/code reload invalidates it. If the runtime reloads, start a new
+export and do not mix the old and new chunks. Chunk indices and unknown IDs
+are validated and report errors.
+
+Delete/reset saved diagnostics without changing the siege itself:
+
+```js
+siegeLog.clear("W18N7-probe") // Only this siege's records
+siegeLog.clear()             // All diagnostics and retention counters
+```
+
+Recording resumes next tick for active operations. To keep it disabled, set
+`SIEGE_POLICY.diagnostics.enabled` to `false` and deploy. Clearing one siege
+preserves the shared dropped-record counter; `status()` and exports label
+that counter as applying across all sieges.
+
 ## RCL 4 siege mode
 
 The `rcl4` target mode in `SIEGE_POLICY.targets` is separate from the boosted
@@ -281,6 +373,163 @@ quad cannot sustainably heal even the minimum 150 damage per tick from one
 active tower (its maximum is 144). This is an expendable draining strategy,
 not a guarantee of victory, and the scout and quad can be killed before
 reaching the drain position. Check `[Siege ...]` status logs for its progress.
+
+## W18N7 two-tower probe (active configuration)
+
+The first operation is now:
+
+```ts
+{ id: "W18N7-probe", targetRoom: "W18N7", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" }
+```
+
+This is a temporary probe, not permission to sustain two-tower fire. It
+tries to provoke safe mode by attacking accessible targets from low-exposure
+positions. The opponent decides whether to activate safe mode; the operation
+does not automatically switch to W19N7 afterward.
+
+- Each unboosted member still costs 2,300 energy, but its body order is
+  **1 RANGED_ATTACK, 7 HEAL, 8 MOVE**. MOVE at the rear protects escape speed;
+  the escape estimate accounts for HEAL lost to damage.
+- Fresh scouting must identify a clear two-wide entrance with a survivable
+  emergency exit before the first wave's combat spawning. Later queued waves
+  may assemble safely at home while scouts refresh stale intel; entry still
+  requires fresh intel. Travel outside uses a tight file,
+  waits for fatigue and gaps, and disables scatter/reversal recovery. Routing
+  excludes the target room until the block entrance is used.
+- Scouts also exclude known enemy-owned transit rooms, using cached room
+  ownership and persistent `Memory.siegeHostileRooms`. The intended enemy
+  target remains reachable, and a scout already inside a hostile room may
+  route out. New ownership observations invalidate cached scout paths.
+  A blocked map route holds the scout and reports the failure instead of
+  falling back through enemy bases. Scout route decisions and excluded rooms
+  are included in diagnostics; newly discovered enemies can still kill a scout.
+- Probe staging and transit also exclude known hostile rooms. A staging room
+  discovered to be hostile invalidates its saved entrance once the wave is
+  outside the target. Separated members regroup while waiting for a new plan;
+  they do not freeze merely because a member is missing or intel is stale.
+- The quad forms a 2x2 outside, then crosses in coordinated pairs and stays
+  a block for probing and withdrawal. Border reversal explicitly handles
+  automatic exit-tile transport. Each new wave assembles four members before
+  deployment. Deployed waves never receive replacement members.
+- Once two members of the newest deployed wave are gone, queue a separate
+  four-member wave. It starts independently when ready; older survivors keep
+  operating until all are gone, without recycling or merging generations.
+  `probeWaves` stores older active waves; `members` stores the newest wave.
+  Waves reserve distinct entrance lanes so the next group does not occupy
+  an older group's intended exit.
+- Surviving groups remain cohesive and may re-enter only if their own reduced
+  healing, health, movement and lifetime pass the escape estimate. An incomplete
+  group's border estimate credits only self-healing, since companions may
+  be in the other room. Thus a pair may safely probe a one-tower fringe but be
+  unable to re-enter against two towers. Unsafe survivors wait outside and heal.
+- Entrances favor the lowest tower exposure. Advances seek reachable targets
+  with the lowest firing-position exposure, then lowest peak route exposure
+  and shorter routes. No speculative breaching is planned. Armed creeps in
+  range retain firing priority; covering ramparts are attacked first.
+- The model assumes all towers can fire, even if currently empty, and budgets
+  all visible defenders' attack/ranged output as potentially intercepting the
+  retreat. Tower power effects prevent entry/advancement. Walls, structures,
+  natural obstacles, live occupants and swamp footprints exclude a route.
+- Every advance must retain a predicted return with **at least 800 hits per
+  member**, plain-speed MOVE capacity and sufficient lifetime. The simulation
+  includes body-order damage/healing, a detection tick, exposed border steps,
+  reduced pair healing and the existing 0.7 safety factor. With two towers,
+  permissible excursions can be very shallow, or no target may be reachable.
+- An incoming attack event on a member triggers withdrawal even if healing
+  hides the health loss. Falling health, safe mode, lost members, stale intel,
+  powered towers or an unsafe/blocked return also trigger withdrawal. The
+  scout taking damage alone does not trigger the quad.
+- Retreat follows **observed** positions, not assumed successful move intents.
+  Healing and defensive fire continue without choosing another attack route.
+  Blockers/fatigue hold the group; a blocked trail can request an alternative
+  block escape. Retry waits until everyone is outside, off exits, regrouped
+  and fully healed. Safe mode keeps the quad outside.
+
+The growing siege log includes each wave's lifecycle, members, entrance,
+approach, observed return trail, target, escape prediction, retreat reason
+and movement outcomes. Unchanged pre-healing uses quiet-tick sampling rather
+than flooding the rolling log; incoming attacks still force a record even
+when healing hides the damage. Export
+with `console.log(siegeLog.export("W18N7-probe"))`, or use the frozen chunk
+commands above for larger logs. Clear with `siegeLog.clear("W18N7-probe")`.
+
+These are conservative predictions, not a survival guarantee. Newly appearing
+defenders, hostile movement conflicts, blocked exits, casualties or forced room
+transfers can defeat the plan. The controller does not intentionally scatter
+survivors or send a reduced group back without a survivable escape estimate.
+
+## RCL 6 sustainable unboosted quad
+
+The `rcl6` mode reuses the small-siege controller, without requiring labs,
+boosts, a terminal, or an observer. An ordinary sustained attack can be configured as:
+
+```ts
+{ id: "W19N7-rcl6", targetRoom: "W19N7", homeRoom: "W17N4", mode: "rcl6" }
+```
+
+Each of the four members costs **2,300 energy** and has **8 MOVE,
+1 RANGED_ATTACK, 7 HEAL** (16 parts, 1,600 hits). This maximizes unboosted
+healing within RCL 6 capacity while retaining ranged fire on every member
+and one-tick plain movement at full health. Total cost is 9,200 energy,
+plus scouting; spawning takes 48 ticks per member. The full quad supplies
+**336 healing/tick and 40 ranged damage/tick**. Swamps take five ticks per
+tile; damaged MOVE parts can slow the entire formation. HEAL parts are last
+in the body to protect healing.
+
+### Tower limits
+
+- One ordinary tower deals 150 damage/tick at range 20+, 210 at range 18,
+  and 600 at range 5 or less.
+- The existing 0.7 safety factor gives a formed quad a **235.2/tick**
+  budget. Every member must therefore remain at least range 18 from a
+  lone active tower (farther if hostile creeps add damage).
+- Entry is more conservative: a single-file endpoint normally has only
+  itself and one adjacent healer, totaling 168 healing/tick. The entire
+  scouted entry path and the staging footprint must stay within that
+  budget, requiring range 20+ from an ordinary active tower. Brief border
+  separation can still cause damage before all healers enter.
+- Two active towers deal at least **300/tick anywhere in the room**.
+  Although nominal full-quad healing is 336, that leaves insufficient
+  reserve for targeting changes, entry, or lost parts. This mode **blocks
+  two-active-tower entry** rather than claiming reliable survival.
+- It cannot assault a firing tower at ranged-attack distance. It holds a
+  sustainable drain position and advances only when the planner finds a
+  route within the live healing budget, typically after a tower empties.
+  A continuously supplied tower may make victory impossible.
+
+### Safety and combat behavior
+
+Fresh scouting and a safe entry are required before spawning combat
+members or committing them to the target room. Travel avoids keeper rooms.
+The quad follows the recorded entry path, forms a 2x2, and advances in
+lock step: fatigue, a missing MOVE capability, an occupied tile, or a new
+structure prevents the whole block from stepping.
+
+All members heal and fire in the same tick. Armed hostile creeps take
+priority, followed by the current breach/plan target, then towers, spawns,
+and other structures in range; covering ramparts are attacked first.
+The planner retains spawn-first objectives with a tower-first fallback
+when the spawn route is unsafe. A later breach action never overwrites
+the hostile-creep attack.
+
+Healing capacity and exposure are checked each tick. Lost members,
+excessive exposure, or health below 75% trigger withdrawal; the quad
+first seeks lower exposure in lock step, healing in a safe formation
+until all members reach the configured 90% recovery threshold. It uses
+file travel to leave if no safer block position is available, or during
+safe mode. A newly unsafe assault path is discarded, without sending
+members independently across the room to the old staging anchor.
+Replacement spawning waits until withdrawal is complete. Combat wipes
+stop at the configured `maxQuadAttempts`; age-expired waves can continue.
+
+These are conservative ordinary-tower estimates, not a survival guarantee:
+defenders, power effects, a refilled tower while the quad is nearby, blocked
+exits, and border separation can still kill members. This mode has no
+suicidal end-of-life rush. Live server validation is still required.
+Once live vision confirms that hostile spawns are gone, replacement spawning
+stops. Surviving members continue healing, retreating when needed, and
+clearing safe remaining targets until they expire; the operation then completes.
+Set the target's `enabled` to `false` or remove it to stop the operation.
 
 ## Solo tower-draining mode
 

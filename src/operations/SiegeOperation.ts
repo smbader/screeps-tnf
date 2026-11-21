@@ -1,8 +1,18 @@
 import { Operation } from "../classes/operation";
 import { QuadController, QuadMember, FileAdvanceResult } from "./QuadController";
 import { SmallSiege } from "./SmallSiege";
+import { ProbeSiege } from "./ProbeSiege";
 import { SoloSiege } from "./SoloSiege";
 import { attackWithMembers, chooseCreepFocus, findStructureAt, healMembers, isArmed } from "./SiegeCombat";
+import {
+  beginSiegeDiagnostics,
+  finishSiegeDiagnostics,
+  observeSiegeDiagnostics,
+  recordCreepAction,
+  recordSiegeError,
+  recordSiegeEvent,
+  travelSiegeCreep
+} from "./SiegeDiagnostics";
 import {
   QUAD_BODIES,
   assessThreats,
@@ -97,6 +107,7 @@ function sameTile(a: TilePos | undefined, b: TilePos | undefined): boolean {
 
 export class SiegeOperation extends Operation {
   private readonly smallSiege = new SmallSiege();
+  private readonly probeSiege = new ProbeSiege();
   private readonly soloSiege = new SoloSiege();
 
   public init(): void {
@@ -104,12 +115,17 @@ export class SiegeOperation extends Operation {
     for (const options of SIEGE_POLICY.targets) {
       if (options.enabled === false) continue;
       const memory = this.getMemory(options);
+      beginSiegeDiagnostics(memory, options);
       try {
         if (options.mode === "solo") this.soloSiege.update(memory, options);
-        else if (options.mode === "rcl4") this.smallSiege.update(memory, options);
+        else if (options.mode === "rcl6" && options.strategy === "probe") this.probeSiege.update(memory, options);
+        else if (options.mode === "rcl4" || options.mode === "rcl6") this.smallSiege.update(memory, options);
         else this.update(memory);
       } catch (error) {
+        recordSiegeError(memory.id, "update", error);
         console.log(`[Siege ${memory.id}] update error: ${error}`);
+      } finally {
+        observeSiegeDiagnostics(memory, "update");
       }
     }
   }
@@ -120,10 +136,14 @@ export class SiegeOperation extends Operation {
       try {
         const options = SIEGE_POLICY.targets.find(target => target.id === memory.id);
         if (options?.mode === "solo") this.soloSiege.supply(memory, options);
-        else if (options?.mode === "rcl4") this.smallSiege.supply(memory, options);
+        else if (options?.mode === "rcl6" && options.strategy === "probe") this.probeSiege.supply(memory, options);
+        else if (options?.mode === "rcl4" || options?.mode === "rcl6") this.smallSiege.supply(memory, options);
         else if (memory.phase === "PREPARING" || memory.phase === "ASSEMBLING") this.supplyQuad(memory);
       } catch (error) {
+        recordSiegeError(memory.id, "spawn", error);
         console.log(`[Siege ${memory.id}] spawn error: ${error}`);
+      } finally {
+        observeSiegeDiagnostics(memory, "spawn");
       }
     }
   }
@@ -134,11 +154,15 @@ export class SiegeOperation extends Operation {
       try {
         const options = SIEGE_POLICY.targets.find(target => target.id === memory.id);
         if (options?.mode === "solo") this.soloSiege.control(memory, options);
-        else if (options?.mode === "rcl4") this.smallSiege.control(memory, options);
+        else if (options?.mode === "rcl6" && options.strategy === "probe") this.probeSiege.control(memory, options);
+        else if (options?.mode === "rcl4" || options?.mode === "rcl6") this.smallSiege.control(memory, options);
         else this.control(memory);
         this.report(memory);
       } catch (error) {
+        recordSiegeError(memory.id, "control", error);
         console.log(`[Siege ${memory.id}] control error: ${error}`);
+      } finally {
+        finishSiegeDiagnostics(memory);
       }
     }
   }
@@ -709,15 +733,18 @@ export class SiegeOperation extends Operation {
     const action = this.getBoostAction(memory, member);
 
     if (action && action !== "wait") {
-      if (creep.pos.isNearTo(action.lab)) action.lab.boostCreep(creep, action.count);
-      else creep.travelTo(action.lab.pos, { range: 1 });
+      if (creep.pos.isNearTo(action.lab)) {
+        const result = action.lab.boostCreep(creep, action.count);
+        recordCreepAction(creep, "boost", result, { lab: action.lab.id, count: action.count });
+      } else travelSiegeCreep(creep, action.lab.pos, { range: 1 });
       return;
     }
 
     const anchorLab = (room.memory.data?.labs?.boosts || [])
       .map(entry => Game.getObjectById(entry.id))
       .find(lab => !!lab);
-    if (creep.room.name !== room.name && anchorLab && action === "wait") creep.travelTo(anchorLab.pos, { range: 3 });
+    if (creep.room.name !== room.name && anchorLab && action === "wait")
+      travelSiegeCreep(creep, anchorLab.pos, { range: 3 });
     else this.parkMember(member);
   }
 
@@ -726,7 +753,7 @@ export class SiegeOperation extends Operation {
     const creep = member.creep;
     const spot = this.getParkingSpot(creep.room, member.slot);
     if (!spot) return;
-    if (creep.pos.x !== spot.x || creep.pos.y !== spot.y) creep.travelTo(spot, { range: 0 });
+    if (creep.pos.x !== spot.x || creep.pos.y !== spot.y) travelSiegeCreep(creep, spot, { range: 0 });
   }
 
   private getParkingSpot(room: Room, slot: QuadSlot): RoomPosition | null {
@@ -812,6 +839,12 @@ export class SiegeOperation extends Operation {
 
       const result = Game.market.deal(best.id, amount, room.name);
       console.log(`[Siege ${memory.id}] bought ${amount} ${shortfall.compound} at ${best.price}: ${result}`);
+      recordSiegeEvent(memory.id, "boost-purchase", {
+        compound: shortfall.compound,
+        amount,
+        price: best.price,
+        result
+      });
       if (result === OK) return;
     }
   }
@@ -865,6 +898,7 @@ export class SiegeOperation extends Operation {
       const result = spawn.spawnCreep(body, name, {
         memory: { role: "siegeQuad", siegeId: memory.id, slot, room: room.name, boostedParts: [] }
       });
+      recordSiegeEvent(memory.id, "spawn", { name, slot, roomName: room.name, body, result });
       if (result === OK) memory.members[slot] = { name, spawnRoom: room.name, spawnedAt: Game.time };
     }
   }
@@ -1008,7 +1042,7 @@ export class SiegeOperation extends Operation {
       const stand = candidates.find(tile => !used.has(`${tile.x},${tile.y}`));
       if (!stand) continue;
       used.add(`${stand.x},${stand.y}`);
-      member.creep.travelTo(new RoomPosition(stand.x, stand.y, room.name), { range: 0, allowHostile: true });
+      travelSiegeCreep(member.creep, new RoomPosition(stand.x, stand.y, room.name), { range: 0, allowHostile: true });
     }
   }
 
@@ -1256,7 +1290,7 @@ export class SiegeOperation extends Operation {
     }
     for (const member of quad.members) {
       if (member.creep.pos.roomName === gatherRoom) continue;
-      member.creep.travelTo(new RoomPosition(gatherAnchor.x, gatherAnchor.y, gatherRoom), { range: 2 });
+      travelSiegeCreep(member.creep, new RoomPosition(gatherAnchor.x, gatherAnchor.y, gatherRoom), { range: 2 });
     }
   }
 
@@ -1268,7 +1302,7 @@ export class SiegeOperation extends Operation {
     if (!gatherRoom || !gatherAnchor) return;
     const target = new RoomPosition(gatherAnchor.x, gatherAnchor.y, gatherRoom);
     for (const member of quad.members) {
-      if (member.creep.pos.roomName === memory.targetRoom) member.creep.travelTo(target, { range: 2 });
+      if (member.creep.pos.roomName === memory.targetRoom) travelSiegeCreep(member.creep, target, { range: 2 });
     }
     if (quad.members.every(member => member.creep.pos.roomName === gatherRoom) && quad.isComplete) {
       quad.formUp(gatherRoom, gatherAnchor);

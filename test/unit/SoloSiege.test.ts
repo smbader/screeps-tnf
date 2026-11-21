@@ -324,13 +324,23 @@ describe("solo siege", () => {
     assert.equal(memory.wave, 2);
   });
 
-  it("avoids keeper exits and rejects swamp escape tiles", () => {
+  it("allows keeper exits but still rejects swamp escape tiles", () => {
     memory.solo = {};
     game.map.describeExits = () => ({ "1": "W16N4", "3": "W17N7" });
     game.map.getRoomTerrain = (roomName: string) => ({
       get: (x: number) => (roomName === "W18N7" && x === 48 ? 2 : 0)
     });
     const op = new SoloSiege();
+    op.update(memory, options);
+    op.supply(memory, options);
+    assert.equal(memory.solo?.entry?.roomName, "W16N4");
+    assert.lengthOf(spawns, 1);
+    memory.solo = {};
+    memory.phase = "PLANNING";
+    spawns.length = 0;
+    game.map.getRoomTerrain = (roomName: string) => ({
+      get: (x: number, y: number) => (roomName === "W18N7" && (x === 48 || y === 1) ? 2 : 0)
+    });
     op.update(memory, options);
     op.supply(memory, options);
     assert.equal(memory.phase, "BLOCKED");

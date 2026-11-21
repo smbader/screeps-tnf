@@ -13,8 +13,10 @@ export class RemoteFarming extends Operation {
 
     operationOperators:Operator[];
     expansionRooms:any[] = [
-        { target: 'W17N3', source: 'W17N4', 'shard': 'shard0' },
-        { target: 'W18N4', source: 'W17N4', 'shard': 'shard0' },
+        { target: 'W27S36', source: 'W28S36', 'shard': 'shard0' },
+        { target: 'W27S37', source: 'W28S36', 'shard': 'shard0' },
+        { target: 'W28S35', source: 'W28S36', 'shard': 'shard0' },
+        { target: 'W28S37', source: 'W28S36', 'shard': 'shard0' },
         //{ target: 'E33N4', source: 'W17N4', 'shard': 'shard0' },
         //{ target: 'E31N4', source: 'W17N4', 'shard': 'shard0' },
     ];
@@ -130,12 +132,12 @@ export class RemoteFarming extends Operation {
                             }
 
                             if (operationOperator instanceof Scout) {
-                                console.log(`    Spawning: ` + operationOperator.name);
+                                //console.log(`    Spawning: ` + operationOperator.name);
                                 spawn.spawnCreep([MOVE], operationOperator.name, { directions: spawnDirection});
                             }
 
                             if (operationOperator instanceof TinyFarmer) {
-                                console.log(`    Spawning: ` + operationOperator.name);
+                                //console.log(`    Spawning: ` + operationOperator.name);
                                 spawn.spawnCreep([WORK, CARRY, MOVE, MOVE ], operationOperator.name, { directions: spawnDirection});
                             }
 
@@ -196,7 +198,7 @@ export class RemoteFarming extends Operation {
                                  }
                             }
                         } else {
-                            console.log(`    Spawning: ` + operationOperator.name + ` at ` + spawn.name + ` Bumping creeps out of the way.`);
+                            //console.log(`    Spawning: ` + operationOperator.name + ` at ` + spawn.name + ` Bumping creeps out of the way.`);
                              if (spawn.spawning.directions[0]) {
                                 let direction = spawn.spawning.directions[0];
                                 let x = spawn.pos.x;

@@ -319,7 +319,13 @@ export const loop = ErrorMapper.wrapLoop(() => {
             'Room Counter: ' + (room.memory.nextTrade - Game.time) + ' ' +
             'Storage Energy: ' + storageEnergy + ' ' +
             'Terminal Energy: ' + room.memory.data.terminal.energy);
+            // Loop through all screeps assoicated with this room and log their time to live
     }
+
+        for (let creepName in Game.creeps) {
+            let creep = Game.creeps[creepName];
+            console.log(`    Creep: ${creep.name} TTL: ${creep.ticksToLive}`);
+        }
 
     if (Game.cpu.bucket < 9000) {
         console.log('[' + Game.shard.name + '] ' + `Tick CPU Usage: ${Game.cpu.getUsed().toFixed(2)}` + ` CPU Bucket: ` + Game.cpu.bucket);

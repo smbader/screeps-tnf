@@ -1,11 +1,19 @@
 import { getHostileSpawns, towerDamage } from "./SiegePlanner";
 import { captureSnapshot } from "./SiegeScanner";
 import { isKeeperRoom, keeperSafeTravel } from "./SiegeRouting";
+import { keeperHazards, keeperRisk } from "./KeeperTravel";
 import { SMALL_SIEGE_BODY } from "./SmallSiege";
 import { attackWithMembers, chooseCreepFocus, findStructureAt } from "./SiegeCombat";
 import { chooseSoloKite } from "./SoloKiting";
 import { planSoloOpportunity } from "./SoloOpportunity";
 import type { SiegeMemory, SiegeOptions, TilePos } from "./SiegeTypes";
+import {
+  moveSiegeCreep,
+  recordCreepAction,
+  recordSiegeEvent,
+  siegePosition,
+  travelSiegeCreep
+} from "./SiegeDiagnostics";
 
 type SoloEntry = NonNullable<NonNullable<SiegeMemory["solo"]>["entry"]>;
 
@@ -18,10 +26,11 @@ const SIDES: { exit: ExitKey; inward: DirectionConstant; outward: DirectionConst
 const BODY_COST = 1300;
 const ENTRY_RETRY_TICKS = 100;
 const LAST_STAND_TICKS = 200;
-export const SOLO_SIEGE_BODY = [
-  ...SMALL_SIEGE_BODY.filter(part => part !== "move"),
-  ...SMALL_SIEGE_BODY.filter(part => part === "move")
-];
+export const SOLO_SIEGE_BODY = SMALL_SIEGE_BODY;
+//export const SOLO_SIEGE_BODY = [
+//  ...SMALL_SIEGE_BODY.filter(part => part !== "move"),
+//  ...SMALL_SIEGE_BODY.filter(part => part === "move")
+//];
 
 function positions(exit: ExitKey, coordinate: number): { outside: TilePos; border: TilePos; inside: TilePos } {
   switch (exit) {
@@ -49,10 +58,6 @@ export class SoloSiege {
     }
     if (home.energyCapacityAvailable < BODY_COST) {
       memory.status = `waiting for ${BODY_COST} energy capacity in ${home.name}`;
-      return;
-    }
-    if (isKeeperRoom(home.name) || isKeeperRoom(memory.targetRoom)) {
-      memory.status = "home or target is a keeper room; no safe route";
       return;
     }
     const room = Game.rooms[memory.targetRoom];
@@ -100,7 +105,7 @@ export class SoloSiege {
       if (!state.entry) {
         memory.phase = "BLOCKED";
         memory.phaseSince = Game.time;
-        memory.status = "no keeper-free entry with a plain escape tile";
+        memory.status = "no safe entry with a plain escape tile";
         return;
       }
     }
@@ -123,6 +128,7 @@ export class SoloSiege {
     const result = spawn.spawnCreep(SOLO_SIEGE_BODY, name, {
       memory: { role: "siegeSolo", siegeId: memory.id, room: home.name }
     });
+    recordSiegeEvent(memory.id, "spawn", { name, roomName: home.name, body: SOLO_SIEGE_BODY, result });
     if (result === OK) {
       state.name = name;
       memory.status = "spawning solo attacker";
@@ -149,6 +155,7 @@ export class SoloSiege {
     state.lastHits = creep.hits;
     state.lastRoom = creep.pos.roomName;
     const healResult = creep.getActiveBodyparts(HEAL) > 0 ? creep.heal(creep) : "no active heal";
+    if (typeof healResult === "number") recordCreepAction(creep, "heal", healResult, { target: creep.id });
     const lastStand =
       creep.ticksToLive !== undefined &&
       creep.ticksToLive <= LAST_STAND_TICKS &&
@@ -162,6 +169,12 @@ export class SoloSiege {
         else if (options.homeRoom && creep.pos.roomName !== options.homeRoom) {
           this.travel(memory, creep, new RoomPosition(25, 25, options.homeRoom), 20);
         }
+        return;
+      }
+      if (!inTarget && isKeeperRoom(creep.pos.roomName) &&
+        (creep.pos.roomName !== entry.roomName)) {
+        memory.status = "keeper-room transit: bypassing unsafe fights";
+        this.travel(memory, creep, new RoomPosition(entry.outside.x, entry.outside.y, entry.roomName), 1);
         return;
       }
       if (lastStand) {
@@ -309,12 +322,12 @@ export class SoloSiege {
     let best: { entry: SoloEntry; score: number } | undefined;
     for (const side of SIDES) {
       const roomName = exits && exits[side.exit];
-      if (!roomName || isKeeperRoom(roomName)) continue;
+      if (!roomName) continue;
       const route =
         home === roomName
           ? []
           : Game.map.findRoute(home, roomName, {
-              routeCallback: room => (isKeeperRoom(room) ? Infinity : 1)
+              routeCallback: () => 1
             });
       if (!Array.isArray(route)) continue;
       const neighborTerrain = Game.map.getRoomTerrain(roomName);
@@ -472,6 +485,11 @@ export class SoloSiege {
     if (inRange) {
       const target = findStructureAt(creep.room, inRange.pos.x, inRange.pos.y) || inRange;
       const result = creep.rangedAttack(target);
+      recordCreepAction(creep, "rangedAttack", result, {
+        target: target.id,
+        pos: siegePosition(target.pos),
+        hits: target.hits
+      });
       this.attackTrace = `ranged attack ${target.id}: ${result}`;
     } else {
       this.fire(creep, true, hostiles);
@@ -526,13 +544,14 @@ export class SoloSiege {
   }
 
   private move(memory: SiegeMemory, creep: Creep, direction: DirectionConstant): void {
-    const result = creep.move(direction);
+    const result = moveSiegeCreep(creep, direction);
     this.movementTrace += ` move direction=${direction} result=${result}`;
     if (result !== OK && result !== ERR_TIRED && result !== ERR_BUSY) memory.status = `solo move failed: ${result}`;
   }
 
   private moveToExact(memory: SiegeMemory, creep: Creep, pos: RoomPosition): void {
     const result = creep.moveTo(pos, { range: 0, maxRooms: 1 });
+    recordCreepAction(creep, "moveTo", result, { destination: siegePosition(pos), range: 0 });
     this.movementTrace = `moveTo ${pos.roomName}:${pos.x},${pos.y} result=${result}`;
     if (result !== OK && result !== ERR_TIRED && result !== ERR_BUSY) memory.status = `solo move failed: ${result}`;
   }
@@ -554,7 +573,7 @@ export class SoloSiege {
   }
 
   private travel(memory: SiegeMemory, creep: Creep, pos: RoomPosition, range: number): ReturnType<Creep["travelTo"]> {
-    const result = creep.travelTo(pos, keeperSafeTravel(range));
+    const result = travelSiegeCreep(creep, pos, keeperSafeTravel(range));
     this.movementTrace = `travel ${pos.roomName}:${pos.x},${pos.y} range=${range} result=${result}`;
     if (result !== OK && result !== ERR_TIRED && result !== ERR_BUSY) memory.status = `solo travel failed: ${result}`;
     return result;

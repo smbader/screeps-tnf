@@ -267,7 +267,7 @@ function getBreachTicks(tiles: BreachTile[], quadDps: number): number {
   return tiles.reduce((total, tile) => total + Math.ceil(tile.hits / Math.max(1, quadDps)) + 1, 0);
 }
 
-class MinHeap {
+export class MinHeap {
   private items: { cost: number; node: number }[] = [];
 
   public get size(): number {

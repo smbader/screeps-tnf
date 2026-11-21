@@ -34,13 +34,21 @@ export interface SiegeOptions {
   id: string;
   targetRoom: string;
   enabled?: boolean;
-  mode?: "rcl4" | "solo";
+  mode?: "rcl4" | "rcl6" | "solo";
+  strategy?: "probe";
   homeRoom?: string;
 }
 
 export interface SiegePolicy {
   enabled: boolean;
   debug: boolean;
+  diagnostics: {
+    enabled: boolean;
+    maxCharacters: number;
+    maxRecords: number;
+    sampleInterval: number;
+    snapshotInterval: number;
+  };
   targets: SiegeOptions[];
   minimumCpuBucket: number;
   observerRange: number;
@@ -66,7 +74,23 @@ export interface SiegePolicy {
 export const SIEGE_POLICY: SiegePolicy = {
   enabled: true,
   debug: true,
-  targets: [{ id: "W18N7-solo", targetRoom: "W18N7", homeRoom: "W17N4", mode: "solo" }],
+  diagnostics: {
+    enabled: true,
+    maxCharacters: 250000,
+    maxRecords: 2000,
+    sampleInterval: 5,
+    snapshotInterval: 25
+  },
+  //targets: [{ id: "W18N7-solo", targetRoom: "W18N7", homeRoom: "W17N4", mode: "solo" }],
+  //targets: [{ id: "W18N7-probe", targetRoom: "W18N7", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" }],
+  //targets: [{ id: "W13N4-probe", targetRoom: "W13N4", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" }],
+  targets: [
+    { id: "W16N7-probe", targetRoom: "W16N7", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" },
+    //{ id: "W13N4_0-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" },
+    //{ id: "W13N4_1-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" },
+    //{ id: "W13N4_2-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" },
+    //{ id: "W13N4_3-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" }
+  ],
   minimumCpuBucket: 3000,
   observerRange: 10,
   scanInterval: 25,
@@ -101,6 +125,7 @@ export interface SnapshotStructure {
   hits: number;
   hostile: boolean;
   energy?: number;
+  hasEffects?: boolean;
 }
 
 export interface SnapshotCreep {
@@ -124,6 +149,7 @@ export interface RoomSnapshot {
   controller?: TilePos;
   structures: SnapshotStructure[];
   creeps: SnapshotCreep[];
+  obstacles?: TilePos[];
 }
 
 export interface BreachTile {
@@ -188,6 +214,37 @@ export interface QuadMemberMemory {
   spawnedAt: number;
 }
 
+export interface ProbeEstimate {
+  safe: boolean;
+  ticks: number;
+  remainingHits: number;
+  reason: string;
+}
+
+export interface ProbeMemory {
+  side: RoomSide;
+  outsideRoom: string;
+  outside: TilePos;
+  inside: TilePos;
+  trail: TilePos[];
+  returning: boolean;
+  lastHits: Record<string, number>;
+  targetId?: string;
+  plan?: TilePos[];
+  estimate?: ProbeEstimate;
+}
+
+export interface ProbeWaveMemory {
+  wave: number;
+  phase: SiegePhase;
+  phaseSince: number;
+  members: Partial<Record<QuadSlot, QuadMemberMemory>>;
+  probe?: ProbeMemory;
+  drainAnchor?: TilePos;
+  status?: string;
+  retreatReason?: string;
+}
+
 export interface SiegeMemory {
   id: string;
   targetRoom: string;
@@ -219,12 +276,25 @@ export interface SiegeMemory {
   blockedReason?: string;
   status?: string;
   scoutName?: string;
+  scoutRoute?: {
+    keeperTransit?: boolean;
+    name: string;
+    origin: string;
+    target: string;
+    avoidedRooms: string[];
+    rooms: string[];
+    plannedAt: number;
+  };
   lastScoutSpawnTick?: number;
   drainAnchor?: TilePos;
   smallSiegeEntry?: { roomName: string; pos: TilePos };
   smallSiegeEntryReady?: boolean;
+  smallSiegeEntryPath?: TilePos[];
   smallSiegeUnscoutedReady?: boolean;
   assaultPlan?: SiegePlan;
+  probe?: ProbeMemory;
+  probeLaunched?: boolean;
+  probeWaves?: ProbeWaveMemory[];
   solo?: {
     name?: string;
     entry?: {

@@ -49,30 +49,30 @@ export class TinyFarmer extends Operator {
         // While you're harvesting continue until you're full.
         if (this.creep.memory.working == true) {
 
-            if (this.creep.ticksToLive && this.creep.ticksToLive < 1400 &&
-                this.creep.pos.roomName == this.room.name &&
-                this.creep.store.getUsedCapacity() == 0 && this.room.energyAvailable >= 1000
-                && !this.room.storage) {
+            //if (this.creep.ticksToLive && this.creep.ticksToLive < 1400 &&
+            //    this.creep.pos.roomName == this.room.name &&
+            //    this.creep.store.getUsedCapacity() == 0 && this.room.energyAvailable >= 1000
+            //    && !this.room.storage) {
 
-                // Renew yourself.
-                let spawn = this.creep.pos.findClosestByPath(FIND_MY_SPAWNS, {
-                    filter: structure => (!(structure.spawning && structure.spawning.remainingTime >= 0))
-                });
-                if (spawn) {
-                    let range = this.creep.pos.getRangeTo(spawn);
+           //     // Renew yourself.
+            //    let spawn = this.creep.pos.findClosestByPath(FIND_MY_SPAWNS, {
+             //       filter: structure => (!(structure.spawning && structure.spawning.remainingTime >= 0))
+           //     });
+           //     if (spawn) {
+           //         let range = this.creep.pos.getRangeTo(spawn);
 
-                    if (range > 9) {
+           //         if (range > 9) {
                         // Already leaving
-                    } else {
-                        if (range == 1) {
-                            spawn.renewCreep(this.creep);
-                        } else {
-                            this.creep.travelTo(spawn.pos);
-                        }
-                        return;
-                    }
-                }
-            }
+              //      } else {
+           //             if (range == 1) {
+            //                spawn.renewCreep(this.creep);
+            //            } else {
+            //                this.creep.travelTo(spawn.pos);
+           //             }
+           //             return;
+            //        }
+           //     }
+           // }
             this.creep.memory.target = this.creep.memory.assignedTarget;
 
             if (this.creep.memory.target == null) {
@@ -163,6 +163,7 @@ export class TinyFarmer extends Operator {
         } else {
 
             if (this.creep.memory.target == null) {
+                this.creep.say('A');
 
                 // Go to target room first.
                 if (this.creep.pos.roomName != this.room.name) {
@@ -186,7 +187,7 @@ export class TinyFarmer extends Operator {
 
 
                 let target = this.creep.pos.findClosestByPath<StructureContainer>(FIND_STRUCTURES, {
-                    filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE || structure.structureType == STRUCTURE_SPAWN)
+                    filter: structure => (structure.structureType == STRUCTURE_TERMINAL || structure.structureType == STRUCTURE_STORAGE)
                 });
 
                 if (target) {

@@ -52,6 +52,7 @@ export function captureSnapshot(room: Room): RoomSnapshot {
     };
     if (structure.structureType === STRUCTURE_TOWER) {
       entry.energy = (structure as StructureTower).store.getUsedCapacity(RESOURCE_ENERGY) || 0;
+      entry.hasEffects = !!structure.effects?.some(effect => effect.ticksRemaining > 0);
     }
     structures.push(entry);
   }

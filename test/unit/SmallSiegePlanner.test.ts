@@ -43,6 +43,30 @@ describe("RCL 4 siege planning", () => {
     assert.isUndefined(chooseDrainEntry(snapshot(), terrain, ["top"], () => false));
   });
 
+  it("admits a distant single tower but rejects two towers for an unboosted RCL6 entry", () => {
+    const terrain = new Array(ROOM_SIZE * ROOM_SIZE).fill(0);
+    const room = snapshot();
+    const entry = chooseDrainEntry(room, terrain, ["top"], () => true, 168);
+    assert.isDefined(entry);
+    const exposure = buildExposureMap(room);
+    assert.isAtMost(getAnchorExposure(exposure, entry!.anchor), 168);
+    assert.deepEqual(entry!.path[0], entry!.entry);
+    assert.deepEqual(entry!.path[entry!.path.length - 1], entry!.anchor);
+    for (const tile of entry!.path) assert.isAtMost(exposure[tile.y * ROOM_SIZE + tile.x], 168);
+    room.structures.push({ ...room.structures[0], id: "tower2", x: 26 });
+    assert.isUndefined(chooseDrainEntry(room, terrain, ["top"], () => true, 168));
+  });
+
+  it("rejects a safe drain position when reaching it requires crossing excessive tower fire", () => {
+    const terrain = new Array(ROOM_SIZE * ROOM_SIZE).fill(1);
+    // A one-wide corridor passes the tower before reaching the only clear 2x2.
+    for (let y = 0; y <= 48; y++) terrain[y * ROOM_SIZE + 20] = 0;
+    for (const y of [47, 48]) terrain[y * ROOM_SIZE + 21] = 0;
+    const room = snapshot();
+    assert.isDefined(chooseDrainEntry(room, terrain, ["top"]));
+    assert.isUndefined(chooseDrainEntry(room, terrain, ["top"], () => true, 168));
+  });
+
   it("forbids keeper rooms even when they are visible or routing fails", () => {
     assert.isTrue(isKeeperRoom("W16N4"));
     assert.isTrue(isKeeperRoom("E4S6"));

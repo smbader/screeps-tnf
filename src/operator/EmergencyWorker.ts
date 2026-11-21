@@ -191,7 +191,10 @@ export class EmergencyWorker extends Operator {
 
                 let target = Game.getObjectById(this.creep.memory.target);
                 let actionresult = 0;
-
+                if (this.creep.memory.action) {
+                    this.creep.say(this.creep.memory.action);
+                }
+                
                 if (target != null) {
                     if (this.creep.memory.action == 'build') {
                         actionresult = this.creep.build(target);

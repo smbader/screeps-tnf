@@ -14,26 +14,32 @@ export interface DrainEntry {
   anchor: TilePos;
   side: RoomSide;
   entry: TilePos;
+  path: TilePos[];
 }
 
 export function chooseDrainEntry(
   snapshot: RoomSnapshot,
   terrain: ArrayLike<number>,
   allowedSides: RoomSide[],
-  canEnter: (side: RoomSide, coordinate: number) => boolean = () => true
+  canEnter: (side: RoomSide, coordinate: number) => boolean = () => true,
+  maxExposure = Infinity
 ): DrainEntry | undefined {
   const grid = buildGrid(snapshot, terrain);
   const exposure = buildExposureMap(snapshot);
   const visited = new Uint8Array(ROOM_SIZE * ROOM_SIZE);
   const seeds: { side: RoomSide; entry: TilePos }[] = [];
   const seedFor = new Int32Array(ROOM_SIZE * ROOM_SIZE).fill(-1);
+  const previous = new Int32Array(ROOM_SIZE * ROOM_SIZE).fill(-1);
   const queue: number[] = [];
-  const push = (x: number, y: number, seedIndex: number): void => {
+  const push = (x: number, y: number, seedIndex: number, parent = -1): void => {
     if (x < 0 || y < 0 || x >= ROOM_SIZE || y >= ROOM_SIZE) return;
+    if (Number.isFinite(maxExposure) && parent !== -1 && (x === 0 || y === 0 || x === 49 || y === 49)) return;
     const index = y * ROOM_SIZE + x;
-    if (visited[index] || terrain[index] === TERRAIN_WALL || grid.blockHits[index] > 0) return;
+    if (visited[index] || terrain[index] === TERRAIN_WALL || grid.blockHits[index] > 0 || exposure[index] > maxExposure)
+      return;
     visited[index] = 1;
     seedFor[index] = seedIndex;
+    previous[index] = parent;
     queue.push(index);
   };
   const seed = (x: number, y: number, side: RoomSide): void => {
@@ -52,7 +58,7 @@ export function chooseDrainEntry(
     const y = Math.floor(index / ROOM_SIZE);
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        if (dx || dy) push(x + dx, y + dy, seedFor[index]);
+        if (dx || dy) push(x + dx, y + dy, seedFor[index], index);
       }
     }
   }
@@ -74,11 +80,17 @@ export function chooseDrainEntry(
       const exitDistance = Math.min(...distances);
       if (damage < bestExposure || (damage === bestExposure && exitDistance < bestExitDistance)) {
         const origin = seeds[seedFor[y * ROOM_SIZE + x]];
-        best = { anchor, side: origin.side, entry: origin.entry };
+        best = { anchor, side: origin.side, entry: origin.entry, path: [] };
         bestExposure = damage;
         bestExitDistance = exitDistance;
       }
     }
+  }
+  if (best) {
+    for (let index = best.anchor.y * ROOM_SIZE + best.anchor.x; index !== -1; index = previous[index]) {
+      best.path.push({ x: index % ROOM_SIZE, y: Math.floor(index / ROOM_SIZE) });
+    }
+    best.path.reverse();
   }
   return best;
 }

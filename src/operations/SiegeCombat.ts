@@ -1,5 +1,6 @@
 import type { QuadMember } from "./QuadController";
 import { summarizeCreep } from "./SiegeScanner";
+import { recordCreepAction, siegePosition } from "./SiegeDiagnostics";
 
 const RANGED_ATTACK_RANGE = 3;
 
@@ -35,7 +36,9 @@ export function healMembers(members: QuadMember[]): void {
         target = candidate;
       }
     }
-    if (healer.creep.heal(target.creep) === OK) {
+    const result = healer.creep.heal(target.creep);
+    recordCreepAction(healer.creep, "heal", result, { target: target.creep.id, targetName: target.creep.name });
+    if (result === OK) {
       deficits.set(
         target.creep.name,
         (deficits.get(target.creep.name) || 0) - summarizeCreep(healer.creep).healPerTick
@@ -84,6 +87,7 @@ export function attackWithMembers(
     const nearbyHostiles = hostiles.filter(hostile => creep.pos.getRangeTo(hostile) <= RANGED_ATTACK_RANGE);
     if (nearbyHostiles.length >= 3 && !(focus && creep.pos.getRangeTo(focus) <= RANGED_ATTACK_RANGE)) {
       const result = creep.rangedMassAttack();
+      recordCreepAction(creep, "rangedMassAttack", result);
       if (onAttack) onAttack(creep, "mass attack", result);
       continue;
     }
@@ -98,6 +102,11 @@ export function attackWithMembers(
     }
     if (target) {
       const result = creep.rangedAttack(target);
+      recordCreepAction(creep, "rangedAttack", result, {
+        target: target.id,
+        pos: siegePosition(target.pos),
+        hits: target.hits
+      });
       if (onAttack) onAttack(creep, `ranged attack ${target.id}`, result);
     }
   }
