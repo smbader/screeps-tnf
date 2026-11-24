@@ -323,8 +323,8 @@ export const loop = ErrorMapper.wrapLoop(() => {
     }
 
         for (let creepName in Game.creeps) {
-            let creep = Game.creeps[creepName];
-            console.log(`    Creep: ${creep.name} TTL: ${creep.ticksToLive}`);
+            //let creep = Game.creeps[creepName];
+            //console.log(`    Creep: ${creep.name} TTL: ${creep.ticksToLive}`);
         }
 
     if (Game.cpu.bucket < 9000) {

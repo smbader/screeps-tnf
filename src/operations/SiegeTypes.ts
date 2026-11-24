@@ -85,7 +85,7 @@ export const SIEGE_POLICY: SiegePolicy = {
   //targets: [{ id: "W18N7-probe", targetRoom: "W18N7", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" }],
   //targets: [{ id: "W13N4-probe", targetRoom: "W13N4", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" }],
   targets: [
-    { id: "W16N7-probe", targetRoom: "W16N7", homeRoom: "W17N4", mode: "rcl6", strategy: "probe" },
+    { id: "W29S33-probe", targetRoom: "W29S33", homeRoom: "W28S36", mode: "rcl4", strategy: "probe" },
     //{ id: "W13N4_0-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" },
     //{ id: "W13N4_1-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" },
     //{ id: "W13N4_2-solo", targetRoom: "W13N4", homeRoom: "W17N4", mode: "solo" },

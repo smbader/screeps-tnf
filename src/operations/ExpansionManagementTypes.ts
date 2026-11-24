@@ -63,7 +63,7 @@ export interface AcceptableExpansionCandidate {
 
 export const EXPANSION_POLICY = {
   minimumCpuBucket: 5000,
-  minimumHomeControllerLevel: 6,
+  minimumHomeControllerLevel: 4,
   minimumStorageEnergy: 100000,
   maximumDistance: 3,
   maximumCandidates: 40,

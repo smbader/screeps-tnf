@@ -15,7 +15,7 @@ export class RemoteFarming extends Operation {
     expansionRooms:any[] = [
         { target: 'W27S36', source: 'W28S36', 'shard': 'shard0' },
         { target: 'W27S37', source: 'W28S36', 'shard': 'shard0' },
-        { target: 'W28S35', source: 'W28S36', 'shard': 'shard0' },
+        //{ target: 'W28S35', source: 'W28S36', 'shard': 'shard0' },
         { target: 'W28S37', source: 'W28S36', 'shard': 'shard0' },
         //{ target: 'E33N4', source: 'W17N4', 'shard': 'shard0' },
         //{ target: 'E31N4', source: 'W17N4', 'shard': 'shard0' },

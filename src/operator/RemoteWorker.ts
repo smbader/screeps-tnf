@@ -79,12 +79,12 @@ export class RemoteWorker extends Operator {
              this.creep.memory.working == true;
          }
 
-        //this.creep.say(this.creep.memory.waypoint + ' ');
         if (this.creep.memory.waypoint == null)  { this.creep.memory.waypoint = 0; }
         if (this.waypoints != undefined) {
             if (this.waypoints[this.creep.memory.waypoint]) {
                 let currentWayPoint = this.waypoints[this.creep.memory.waypoint];
                 let wayPointPos = new RoomPosition(currentWayPoint.x, currentWayPoint.y, currentWayPoint.room);
+                this.creep.say(wayPointPos.x + ',' + wayPointPos.y + ' ' + wayPointPos.roomName);
                 if ('shard' + currentWayPoint.shard !== Game.shard.name){
                     this.creep.memory.waypoint += 1;
                 } else if (this.creep.pos.getRangeTo(wayPointPos) == 0) {

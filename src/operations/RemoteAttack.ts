@@ -30,8 +30,8 @@ class RemoteAttack extends Operation {
     ];
 
     attackRooms:any[] = [
-        { target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
-        { target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        { target: 'W25S37', source: 'W28S36', forcespawn: true, total: 3, rangertype: this.mediumRangerBody, waypoints: [ ] },
+        //{ target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         //{ target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         //{ target: 'W28S35', source: 'W28S36', forcespawn: true, total: 1, rangertype: this.mediumRangerBody, waypoints: [ ] },
         //{ target: "E31N2", source: 'E31N1', forcespawn: true, total: 4, rangertype: this.jumboRangerBody, waypoints: [ ] },

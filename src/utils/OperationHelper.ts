@@ -18,6 +18,7 @@ import { SiegeOperation } from "../operations/SiegeOperation";
 import { SquadDefense } from "../operations/SquadDefense";
 import { ControllerAttacker } from "../operations/ControllerAttacker";
 import { SiloDefense } from "../operations/SiloDefense";
+import { ManualExpansion } from "../operations/ManualExpansion";
 
 type Type_Operation_Classes = {
     [key: string]: any,
@@ -41,6 +42,7 @@ const OPERATION_CLASSES: Type_Operation_Classes = {
     //remoteconstruction: RemoteDeconstruction,
     labprocesses: LabProcesses,
     silodefense: SiloDefense,
+    manualexpansion: ManualExpansion,
 };
 
 export var OperationHelper = {

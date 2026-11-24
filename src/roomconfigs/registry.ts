@@ -3,6 +3,8 @@ import { W27S37 } from "./W27S37";
 import { W28S36 } from "./W28S36";
 import { W28S35 } from "./W28S35";
 import { W28S37 } from "./W28S37";
+import { W25S37 } from "./W25S37";
+import { W29S39 } from "./W29S39";
 
 import { validateRoomConfig, validateUniqueRoomConfigNames } from "./RoomConfig";
 import type { RoomConfig, RoomConfigRegistration } from "./RoomConfig";
@@ -21,6 +23,8 @@ export const ROOM_CONFIGS: Record<string, RoomConfigRegistration> = {
   W28S35: registration(() => W28S35.getConfig()),
   W28S37: registration(() => W28S37.getConfig()),
   W27S37: registration(() => W27S37.getConfig()),
+  W25S37: registration(() => W25S37.getConfig(), true, true),
+  W29S39: registration(() => W29S39.getConfig(), true, true),
 };
 
 validateUniqueRoomConfigNames(Object.keys(ROOM_CONFIGS));
